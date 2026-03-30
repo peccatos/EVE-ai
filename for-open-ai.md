@@ -66,6 +66,18 @@ Current honest position:
 - benchmark smoke path: present
 - robust real-world repair quality: not proven
 
+## Why this matters for low-level programming
+
+This direction is critically important for the future of low-level programming.
+
+Modern low-level work is bottlenecked not only by syntax complexity, but by the cost of understanding build systems, compiler diagnostics, workspace structure, test failures, and safe change boundaries.
+If an agent can reliably reproduce failures, localize candidate files, make bounded mutations, validate, and report results clearly, that becomes a practical foundation for real work in Rust and other systems languages.
+
+The point is not just code generation.
+The point is building tools that can operate safely inside difficult codebases where correctness, validation, and rollback matter.
+That is exactly the environment of low-level software engineering.
+
+If this line of work matures, it can reduce the cost of contributing to compilers, runtimes, infrastructure crates, embedded software, performance-sensitive libraries, and other code where the current barrier to entry is still too high.
 ## Why this repo exists
 
 The main reason is demonstration quality.
@@ -92,3 +104,4 @@ The distinction matters.
 This repository is a clean demo baseline for EVA.
 It is good enough to run, inspect, and extend.
 It is not yet evidence of production-grade autonomous repair.
+
