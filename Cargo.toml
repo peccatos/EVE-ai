@@ -1,0 +1,30 @@
+[package]
+name = "eva_runtime_with_task_validator"
+version = "0.1.0"
+edition = "2021"
+autobins = false
+default-run = "eva_runtime_with_task_validator"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[[bin]]
+name = "eva_runtime_with_task_validator"
+path = "src/main.rs"
+
+[[bin]]
+name = "github_repo_discover"
+path = "src/bin/github_repo_discover.rs"
+
+[[bin]]
+name = "github_repo_prepare"
+path = "src/bin/github_repo_prepare.rs"
+
+[[bin]]
+name = "benchmark_batch"
+path = "src/bin/benchmark_batch.rs"

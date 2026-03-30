@@ -1,0 +1,30 @@
+{
+  "language": "Rust",
+  "query": "rust cargo.toml tests",
+  "license_allowlist": [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "MIT OR Apache-2.0"
+  ],
+  "exclude_full_names": [
+    "rust-lang/rust",
+    "denoland/deno"
+  ],
+  "exclude_names": [
+    "awesome",
+    "training",
+    "course",
+    "tutorial",
+    "exercise",
+    "exercism"
+  ],
+  "min_repo_size_kb": 50,
+  "max_repo_size_kb": 100000,
+  "target_repo_size_kb": 3000,
+  "require_tests_or_ci": true,
+  "min_stars": 5,
+  "max_results": 20,
+  "output_manifest_path": "benchmarks/rust_cases.json"
+}
