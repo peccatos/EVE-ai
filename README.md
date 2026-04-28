@@ -1,3 +1,24 @@
+e^e is not an assistant.
+
+It is a deterministic decision runtime.
+
+Built in Rust, it operates as a closed-loop system:
+belief state → strategy selection → execution → evaluation → memory update.
+
+Key properties:
+- no hidden state
+- no uncontrolled randomness (bounded stochasticity)
+- explicit risk modeling
+- horizon-based decision evaluation
+- adaptive strategy weighting
+
+The system is designed to evolve under constraints,
+not to generate responses.
+
+Target: autonomous orchestration layer for complex systems.
+
+---
+
 # eva_runtime_with_task_validator demo
 
 Компактная демонстрационная версия EVA для локального запуска.
