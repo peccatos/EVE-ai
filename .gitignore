@@ -1,0 +1,13 @@
+/target/
+/.codex
+/eva_output/
+/benchmarks/repos/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+/fixtures/*_prepared.json
+/fixtures/*_ready.json
+/fixtures/*_batch_report.json
+/fixtures/*_discovery_manifest.json
+/fixtures/*_fixture/

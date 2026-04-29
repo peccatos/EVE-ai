@@ -1,0 +1,34 @@
+{
+  "items": [
+    {
+      "full_name": "example/demo-crate",
+      "html_url": "https://github.com/example/demo-crate",
+      "description": "Small Rust crate with tests",
+      "stargazers_count": 42,
+      "size": 1200,
+      "forks_count": 5,
+      "open_issues_count": 2,
+      "default_branch": "main",
+      "archived": false,
+      "disabled": false,
+      "license": {
+        "spdx_id": "MIT"
+      }
+    },
+    {
+      "full_name": "example/huge-gpl-repo",
+      "html_url": "https://github.com/example/huge-gpl-repo",
+      "description": "Should be filtered out",
+      "stargazers_count": 999,
+      "size": 500000,
+      "forks_count": 100,
+      "open_issues_count": 30,
+      "default_branch": "main",
+      "archived": false,
+      "disabled": false,
+      "license": {
+        "spdx_id": "GPL-3.0"
+      }
+    }
+  ]
+}
