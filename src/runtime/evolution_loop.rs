@@ -1,9 +1,10 @@
 use crate::contracts::{
-    CommandResult, MutationContract, MutationObjective, SandboxResult, TaskContract,
+    CommandResult, MutationContract, MutationObjective, RecombinedHypothesis, SandboxResult,
+    TaskContract,
 };
 use crate::evolution::{
-    dedup, generator, memory, metrics, mutator, regression_memory, scorer, success_memory,
-    validator, write_report, EvolutionScore, LearningContext,
+    dedup, generator, memory, metrics, mutator, recombination, regression_memory, scorer,
+    success_memory, validator, write_report, EvolutionScore, LearningContext,
 };
 use crate::sandbox::{manager, runner, snapshot};
 
@@ -15,6 +16,9 @@ struct PlanContext {
     graph_evidence: Vec<String>,
     regression_penalty: f32,
     success_bonus: f32,
+    recombined_source_patterns: Vec<String>,
+    recombined_avoided_risks: Vec<String>,
+    recombination_reason_ru: Option<String>,
 }
 
 pub fn run_evolution_cycle(project_root: &str) -> Result<(), String> {
@@ -75,7 +79,22 @@ pub fn run_planned_evolution_cycle_for_task(
             graph_evidence: plan.graph_evidence.clone(),
             regression_penalty: hypothesis.regression_penalty,
             success_bonus: hypothesis.success_bonus,
+            recombined_source_patterns: Vec::new(),
+            recombined_avoided_risks: Vec::new(),
+            recombination_reason_ru: None,
         }),
+    )
+}
+
+pub fn run_recombined_evolution_cycle(project_root: &str, memory_root: &str) -> Result<(), String> {
+    let hypothesis = recombination::top_recombined_hypothesis(memory_root)?;
+    let mutation = recombination::generate_from_recombined_hypothesis(&hypothesis)?;
+    validator::validate_mutation(&mutation)?;
+    run_evolution_cycle_with_mutation(
+        project_root,
+        memory_root,
+        mutation,
+        Some(recombined_plan_context(&hypothesis)),
     )
 }
 
@@ -127,7 +146,7 @@ fn run_evolution_cycle_with_mutation(
         };
         let regression = regression_memory::record_regression(memory_root, &preliminary)?;
         let final_entry = with_learning_adjustments(
-            preliminary,
+            with_recombination_context(preliminary, plan_context.as_ref()),
             regression.penalty
                 + plan_context
                     .as_ref()
@@ -212,7 +231,7 @@ fn run_evolution_cycle_with_mutation(
             0.0
         };
         let entry = with_learning_adjustments(
-            preliminary,
+            with_recombination_context(preliminary, plan_context.as_ref()),
             regression_penalty
                 + plan_context
                     .as_ref()
@@ -323,4 +342,39 @@ fn with_learning_adjustments(
     entry.regression_penalty = regression_penalty;
     entry.success_bonus = success_bonus;
     entry
+}
+
+fn with_recombination_context(
+    mut entry: crate::contracts::EvolutionLogEntry,
+    context: Option<&PlanContext>,
+) -> crate::contracts::EvolutionLogEntry {
+    if let Some(context) = context {
+        entry.recombined_source_patterns = context.recombined_source_patterns.clone();
+        entry.recombined_avoided_risks = context.recombined_avoided_risks.clone();
+        entry.recombination_reason_ru = context.recombination_reason_ru.clone();
+    }
+    entry
+}
+
+fn recombined_plan_context(hypothesis: &RecombinedHypothesis) -> PlanContext {
+    PlanContext {
+        plan_id: None,
+        hypothesis_id: Some(hypothesis.hypothesis_id.clone()),
+        objective: Some(match hypothesis.target_objective.as_str() {
+            "ImproveTests" => MutationObjective::ImproveTests,
+            "ImproveValidation" => MutationObjective::ImproveValidation,
+            "ImproveReplayability" => MutationObjective::ImproveReplayability,
+            "ImproveGraphMemory" => MutationObjective::ImproveGraphMemory,
+            "ImproveScoring" => MutationObjective::ImproveScoring,
+            "ReduceStorage" => MutationObjective::ReduceStorage,
+            "ReduceRuntimeCost" => MutationObjective::ReduceRuntimeCost,
+            _ => MutationObjective::ImproveReliability,
+        }),
+        graph_evidence: hypothesis.source_patterns.clone(),
+        regression_penalty: 0.0,
+        success_bonus: 0.0,
+        recombined_source_patterns: hypothesis.source_patterns.clone(),
+        recombined_avoided_risks: hypothesis.avoided_risks.clone(),
+        recombination_reason_ru: Some(hypothesis.reason_ru.clone()),
+    }
 }

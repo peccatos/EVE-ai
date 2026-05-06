@@ -1,4 +1,6 @@
-use crate::contracts::{MutationContract, MutationKind, MutationObjective, MutationPlan};
+use crate::contracts::{
+    MutationContract, MutationKind, MutationObjective, MutationPlan, RecombinedHypothesis,
+};
 use crate::evolution::templates::{
     generate_add_learning_summary_field, generate_add_metric_update, generate_add_replay_assertion,
     generate_add_unit_test,
@@ -75,6 +77,12 @@ pub fn generate_from_plan(plan: &MutationPlan) -> MutationContract {
         expected_gain: plan.expected_gain.clamp(0.0, 1.0),
         risk: plan.estimated_risk.clamp(0.0, 1.0),
     }
+}
+
+pub fn generate_from_recombined_hypothesis(
+    hypothesis: &RecombinedHypothesis,
+) -> Result<MutationContract, String> {
+    crate::evolution::recombination::generate_from_recombined_hypothesis(hypothesis)
 }
 
 pub fn default_kind_for_objective(objective: MutationObjective) -> MutationKind {

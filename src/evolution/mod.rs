@@ -9,6 +9,7 @@ pub mod memory;
 pub mod metrics;
 pub mod mutator;
 pub mod patterns;
+pub mod recombination;
 pub mod regression_memory;
 pub mod report_ru;
 pub mod rollback;
@@ -30,7 +31,9 @@ pub use dedup::{
     compute_mutation_digest, load_dedup_entries, record_dedup_entry, should_reject_duplicate_bad,
     DedupEntry,
 };
-pub use generator::{generate_from_plan, generate_safe_mutation};
+pub use generator::{
+    generate_from_plan, generate_from_recombined_hypothesis, generate_safe_mutation,
+};
 pub use hypothesis::{rank_plans, EvolutionHypothesis};
 pub use learning_context::LearningContext;
 pub use memory::{record_evolution, CandidateSummary, ReplayResult};
@@ -39,6 +42,9 @@ pub use metrics::{
 };
 pub use mutator::apply_mutation;
 pub use patterns::{distill_patterns, DistilledPatternSummary};
+pub use recombination::{
+    load_recombined_hypotheses, render_recombined_hypotheses, top_recombined_hypothesis,
+};
 pub use regression_memory::{load_regressions, record_regression, RegressionEntry};
 pub use report_ru::{
     load_report_json, print_last_report, print_report, refresh_report, write_report,

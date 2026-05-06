@@ -11,6 +11,14 @@ pub struct EvolutionReport {
     pub mutation_ru: String,
     pub target_file: String,
     pub mutation_kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hypothesis_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_patterns: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub avoided_risks: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recombination_reason_ru: Option<String>,
     pub sandbox_ru: String,
     pub checks_ru: String,
     pub score_ru: String,

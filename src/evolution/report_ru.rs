@@ -83,6 +83,10 @@ fn build_report(
         mutation_ru: mutation_ru(entry, mutation),
         target_file: entry.target_file.clone(),
         mutation_kind: entry.mutation_kind.clone(),
+        hypothesis_id: entry.hypothesis_id.clone(),
+        source_patterns: entry.recombined_source_patterns.clone(),
+        avoided_risks: entry.recombined_avoided_risks.clone(),
+        recombination_reason_ru: entry.recombination_reason_ru.clone(),
         sandbox_ru: sandbox_ru(entry),
         checks_ru: checks_ru(entry),
         score_ru: score_ru(entry),
@@ -96,10 +100,36 @@ fn build_report(
 }
 
 fn render_markdown(report: &EvolutionReport) -> String {
+    let recombination_block = if report.source_patterns.is_empty()
+        && report.avoided_risks.is_empty()
+        && report.recombination_reason_ru.is_none()
+    {
+        String::new()
+    } else {
+        format!(
+            "\n## Рекомбинация\nГипотеза: {}\nSource patterns: {}\nAvoided risks: {}\nПричина: {}\n",
+            report.hypothesis_id.as_deref().unwrap_or("нет"),
+            if report.source_patterns.is_empty() {
+                "(none)".to_string()
+            } else {
+                report.source_patterns.join(", ")
+            },
+            if report.avoided_risks.is_empty() {
+                "(none)".to_string()
+            } else {
+                report.avoided_risks.join(", ")
+            },
+            report
+                .recombination_reason_ru
+                .as_deref()
+                .unwrap_or("нет")
+        )
+    };
     format!(
-        "# Отчёт EVA\n\n## Цель\n{}\n\n## Гипотеза\n{}\n\n## Мутация\n{}\nФайл: {}\nТип: {}\n\n## Sandbox\n{}\n\n## Проверка\n{}\n\n## Решение\n{}\n\n## Повторное воспроизведение\nСтатус: {}\n{}\n{}\n\n## Риск\n{}\n\n## Следующий шаг\n{}\n",
+        "# Отчёт EVA\n\n## Цель\n{}\n\n## Гипотеза\n{}\n{}\n## Мутация\n{}\nФайл: {}\nТип: {}\n\n## Sandbox\n{}\n\n## Проверка\n{}\n\n## Решение\n{}\n\n## Повторное воспроизведение\nСтатус: {}\n{}\n{}\n\n## Риск\n{}\n\n## Следующий шаг\n{}\n",
         report.goal_ru,
         report.selected_plan_ru,
+        recombination_block,
         report.mutation_ru,
         report.target_file,
         report.mutation_kind,
@@ -151,6 +181,9 @@ fn load_candidate_entry(
         hypothesis_id: None,
         objective: None,
         graph_evidence: Vec::new(),
+        recombined_source_patterns: Vec::new(),
+        recombined_avoided_risks: Vec::new(),
+        recombination_reason_ru: None,
         mutation_id: summary.mutation_id.clone(),
         mutation_digest: summary.mutation_digest.clone(),
         status: summary.status,

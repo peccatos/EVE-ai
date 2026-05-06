@@ -89,6 +89,12 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
   cargo run -- --distill-patterns
       Distill local-only successful and risky evolution patterns into memory/patterns/.
 
+  cargo run -- --recombine-patterns
+      Print top deterministic recombined hypotheses without mutation or sandbox creation.
+
+  cargo run -- --evolve-recombined
+      Run one recombined bounded evolution cycle in a disposable sandbox.
+
   cargo run -- --serve [--config eva.runtime.json]
       Start the HTTP runtime daemon. Defaults to 127.0.0.1:8765.
 
@@ -131,6 +137,8 @@ pub enum RuntimeCliCommand {
     Campaign(String),
     LastCampaignReport,
     DistillPatterns,
+    RecombinePatterns,
+    EvolveRecombined,
     Serve(RuntimeDaemonConfig),
 }
 
@@ -256,6 +264,12 @@ impl RuntimeCliCommand {
         }
         if raw_args == ["--distill-patterns"] {
             return Ok(Self::DistillPatterns);
+        }
+        if raw_args == ["--recombine-patterns"] {
+            return Ok(Self::RecombinePatterns);
+        }
+        if raw_args == ["--evolve-recombined"] {
+            return Ok(Self::EvolveRecombined);
         }
         if raw_args.len() == 2 && raw_args[0] == "--report" {
             return Ok(Self::Report(raw_args[1].clone()));

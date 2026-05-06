@@ -22,6 +22,12 @@ pub struct EvolutionLogEntry {
     pub objective: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub graph_evidence: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recombined_source_patterns: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recombined_avoided_risks: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recombination_reason_ru: Option<String>,
     pub mutation_id: String,
     #[serde(default)]
     pub mutation_digest: String,

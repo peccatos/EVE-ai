@@ -2,11 +2,11 @@ use eva_runtime_with_task_validator::{
     autonomy_status, build_project_phase_runtime_output, candidate_diff, distill_patterns,
     ingest_repo_patterns, learning_summary, list_candidates, load_metrics, print_benchmark,
     print_campaign, print_last_campaign_report, print_last_report, print_report, promote_candidate,
-    refresh_metrics, refresh_report, render_plans, replay_candidate, review_candidate,
-    run_benchmark, run_evolution_cycle, run_planned_cycles, run_planned_evolution_cycle,
-    run_repo_patch_report, run_stored_campaign, run_task_from_path, serve_runtime_daemon,
-    should_run_repo_patch_mode, CycleInput, RepoPatchCliConfig, RuntimeCliCommand,
-    RuntimeCycleRunner, RUNTIME_CLI_HELP,
+    refresh_metrics, refresh_report, render_plans, render_recombined_hypotheses, replay_candidate,
+    review_candidate, run_benchmark, run_evolution_cycle, run_planned_cycles,
+    run_planned_evolution_cycle, run_recombined_evolution_cycle, run_repo_patch_report,
+    run_stored_campaign, run_task_from_path, serve_runtime_daemon, should_run_repo_patch_mode,
+    CycleInput, RepoPatchCliConfig, RuntimeCliCommand, RuntimeCycleRunner, RUNTIME_CLI_HELP,
 };
 use serde::Deserialize;
 use std::fs;
@@ -244,6 +244,24 @@ fn main() {
                     std::process::exit(1);
                 }
             }
+            return;
+        }
+        Ok(RuntimeCliCommand::RecombinePatterns) => {
+            match render_recombined_hypotheses("memory") {
+                Ok(output) => println!("{output}"),
+                Err(err) => {
+                    eprintln!("recombine_patterns_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::EvolveRecombined) => {
+            if let Err(err) = run_recombined_evolution_cycle(".", "memory") {
+                eprintln!("evolve_recombined_error: {err}");
+                std::process::exit(1);
+            }
+            println!("evolve_recombined_status: ok");
             return;
         }
         Ok(RuntimeCliCommand::Replay(run_id)) => {

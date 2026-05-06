@@ -48,6 +48,19 @@ pub fn update_graph_for_evolution(
     graph.upsert_edge(&mutation, &target, "targets");
     graph.upsert_edge(&mutation, &status, "resulted_in");
     graph.upsert_edge(&mutation, &score_band, "scored_as");
+    if let Some(hypothesis_id) = &entry.hypothesis_id {
+        graph.upsert_node(hypothesis_id, "Hypothesis");
+        graph.upsert_edge(hypothesis_id, &mutation, "suggested_mutation");
+        for pattern in &entry.recombined_source_patterns {
+            graph.upsert_node(pattern, "Pattern");
+            graph.upsert_edge(hypothesis_id, pattern, "source_pattern");
+        }
+        for risk in &entry.recombined_avoided_risks {
+            let risk_node = format!("risk:{risk}");
+            graph.upsert_node(&risk_node, "Risk");
+            graph.upsert_edge(hypothesis_id, &risk_node, "avoided_risk");
+        }
+    }
     graph.compact();
     write_graph(&path, &graph)
 }
