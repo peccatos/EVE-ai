@@ -1,5 +1,7 @@
 use eva_runtime_with_task_validator::{
-    build_project_phase_runtime_output, run_repo_patch_report, serve_runtime_daemon,
+    build_project_phase_runtime_output, ingest_repo_patterns, list_candidates, load_metrics,
+    promote_candidate, render_plans, replay_candidate, run_evolution_cycle,
+    run_planned_evolution_cycle, run_repo_patch_report, serve_runtime_daemon,
     should_run_repo_patch_mode, CycleInput, RepoPatchCliConfig, RuntimeCliCommand,
     RuntimeCycleRunner, RUNTIME_CLI_HELP,
 };
@@ -32,6 +34,79 @@ fn main() {
             return;
         }
         Ok(RuntimeCliCommand::Once) => {}
+        Ok(RuntimeCliCommand::Evolve) => {
+            if let Err(err) = run_evolution_cycle(".") {
+                eprintln!("evolution_cycle_error: {err}");
+                std::process::exit(1);
+            }
+            println!("evolution_cycle_status: ok");
+            return;
+        }
+        Ok(RuntimeCliCommand::PlanEvolution) => {
+            match render_plans("memory") {
+                Ok(output) => println!("{output}"),
+                Err(err) => {
+                    eprintln!("plan_evolution_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::EvolvePlanned) => {
+            if let Err(err) = run_planned_evolution_cycle(".", "memory") {
+                eprintln!("planned_evolution_error: {err}");
+                std::process::exit(1);
+            }
+            println!("planned_evolution_status: ok");
+            return;
+        }
+        Ok(RuntimeCliCommand::Metrics) => {
+            match load_metrics("memory") {
+                Ok(metrics) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&metrics).expect("serialize metrics")
+                ),
+                Err(err) => {
+                    eprintln!("metrics_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ListCandidates) => {
+            match list_candidates("memory") {
+                Ok(output) => println!("{output}"),
+                Err(err) => {
+                    eprintln!("list_candidates_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::Replay(run_id)) => {
+            if let Err(err) = replay_candidate(".", "memory", &run_id) {
+                eprintln!("replay_error: {err}");
+                std::process::exit(1);
+            }
+            println!("replay_status: ok");
+            return;
+        }
+        Ok(RuntimeCliCommand::Promote(run_id)) => {
+            if let Err(err) = promote_candidate(".", "memory", &run_id) {
+                eprintln!("promotion_error: {err}");
+                std::process::exit(1);
+            }
+            println!("promotion_status: ok");
+            return;
+        }
+        Ok(RuntimeCliCommand::IngestRepo(path)) => {
+            if let Err(err) = ingest_repo_patterns(&path, "memory") {
+                eprintln!("ingest_repo_error: {err}");
+                std::process::exit(1);
+            }
+            println!("ingest_repo_status: ok");
+            return;
+        }
         Ok(RuntimeCliCommand::Serve(config)) => {
             if let Err(err) = serve_runtime_daemon(config) {
                 eprintln!("runtime_daemon_error: {err}");

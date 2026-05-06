@@ -23,6 +23,30 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
   cargo run -- --once
       Run one local deterministic runtime cycle and print JSON.
 
+  cargo run -- --evolve
+      Run one bounded self-evolution cycle in a disposable sandbox.
+
+  cargo run -- --plan-evolution
+      Print graph-guided plans without mutating or creating a sandbox.
+
+  cargo run -- --evolve-planned
+      Run one graph-guided bounded evolution cycle in a disposable sandbox.
+
+  cargo run -- --metrics
+      Print compact evolution metrics.
+
+  cargo run -- --list-candidates
+      List stored manual-promotion candidates.
+
+  cargo run -- --replay <RUN_ID>
+      Replay a stored candidate in a fresh sandbox.
+
+  cargo run -- --promote <RUN_ID>
+      Manually promote a gated candidate into the real project.
+
+  cargo run -- --ingest-repo <PATH>
+      Read local Rust repo patterns into memory/graph.json without mutating the repo.
+
   cargo run -- --serve [--config eva.runtime.json]
       Start the HTTP runtime daemon. Defaults to 127.0.0.1:8765.
 
@@ -43,6 +67,14 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
 pub enum RuntimeCliCommand {
     Help,
     Once,
+    Evolve,
+    PlanEvolution,
+    EvolvePlanned,
+    Metrics,
+    ListCandidates,
+    Replay(String),
+    Promote(String),
+    IngestRepo(String),
     Serve(RuntimeDaemonConfig),
 }
 
@@ -136,12 +168,37 @@ impl RuntimeCliCommand {
         if raw_args == ["--once"] {
             return Ok(Self::Once);
         }
+        if raw_args == ["--evolve"] {
+            return Ok(Self::Evolve);
+        }
+        if raw_args == ["--plan-evolution"] {
+            return Ok(Self::PlanEvolution);
+        }
+        if raw_args == ["--evolve-planned"] {
+            return Ok(Self::EvolvePlanned);
+        }
+        if raw_args == ["--metrics"] {
+            return Ok(Self::Metrics);
+        }
+        if raw_args == ["--list-candidates"] {
+            return Ok(Self::ListCandidates);
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--replay" {
+            return Ok(Self::Replay(raw_args[1].clone()));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--promote" {
+            return Ok(Self::Promote(raw_args[1].clone()));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--ingest-repo" {
+            return Ok(Self::IngestRepo(raw_args[1].clone()));
+        }
 
         let config_path = parse_config_path(&raw_args)?;
         let file_config = load_optional_runtime_config(config_path.as_deref())?;
 
         let mut serve = false;
         let mut once = false;
+        let mut evolve = false;
         let mut listen_addr = file_config
             .as_ref()
             .map(|config| config.listen_addr.clone())
@@ -216,6 +273,7 @@ impl RuntimeCliCommand {
             match arg.as_str() {
                 "--help" | "-h" => return Ok(Self::Help),
                 "--once" => once = true,
+                "--evolve" => evolve = true,
                 "--serve" => serve = true,
                 "--config" => {
                     daemon_flag_used = true;
@@ -300,12 +358,24 @@ impl RuntimeCliCommand {
         if once && serve {
             return Err("--once cannot be used with --serve".to_string());
         }
+        if evolve && serve {
+            return Err("--evolve cannot be used with --serve".to_string());
+        }
+        if once && evolve {
+            return Err("--once cannot be used with --evolve".to_string());
+        }
 
         if !serve {
             if daemon_flag_used {
                 return Err("model daemon flags require --serve".to_string());
             }
-            return Ok(if once { Self::Once } else { Self::Help });
+            return Ok(if once {
+                Self::Once
+            } else if evolve {
+                Self::Evolve
+            } else {
+                Self::Help
+            });
         }
 
         if listen_addr.trim().is_empty() {
@@ -946,6 +1016,14 @@ mod tests {
     }
 
     #[test]
+    fn runtime_cli_parses_evolve() {
+        assert_eq!(
+            RuntimeCliCommand::parse_from_iter(["--evolve"]).unwrap(),
+            RuntimeCliCommand::Evolve
+        );
+    }
+
+    #[test]
     fn runtime_cli_parses_serve_config() {
         let command = RuntimeCliCommand::parse_from_iter([
             "--serve",
@@ -966,6 +1044,8 @@ mod tests {
             }
             RuntimeCliCommand::Help => panic!("expected serve command"),
             RuntimeCliCommand::Once => panic!("expected serve command"),
+            RuntimeCliCommand::Evolve => panic!("expected serve command"),
+            _ => panic!("expected serve command"),
         }
     }
 
@@ -1008,6 +1088,8 @@ mod tests {
             }
             RuntimeCliCommand::Help => panic!("expected serve command"),
             RuntimeCliCommand::Once => panic!("expected serve command"),
+            RuntimeCliCommand::Evolve => panic!("expected serve command"),
+            _ => panic!("expected serve command"),
         }
     }
 
@@ -1035,6 +1117,8 @@ mod tests {
             }
             RuntimeCliCommand::Help => panic!("expected serve command"),
             RuntimeCliCommand::Once => panic!("expected serve command"),
+            RuntimeCliCommand::Evolve => panic!("expected serve command"),
+            _ => panic!("expected serve command"),
         }
     }
 
@@ -1078,6 +1162,8 @@ mod tests {
             }
             RuntimeCliCommand::Help => panic!("expected serve command"),
             RuntimeCliCommand::Once => panic!("expected serve command"),
+            RuntimeCliCommand::Evolve => panic!("expected serve command"),
+            _ => panic!("expected serve command"),
         }
     }
 
@@ -1101,6 +1187,8 @@ mod tests {
             }
             RuntimeCliCommand::Help => panic!("expected serve command"),
             RuntimeCliCommand::Once => panic!("expected serve command"),
+            RuntimeCliCommand::Evolve => panic!("expected serve command"),
+            _ => panic!("expected serve command"),
         }
     }
 
@@ -1143,6 +1231,8 @@ mod tests {
             }
             RuntimeCliCommand::Help => panic!("expected serve command"),
             RuntimeCliCommand::Once => panic!("expected serve command"),
+            RuntimeCliCommand::Evolve => panic!("expected serve command"),
+            _ => panic!("expected serve command"),
         }
 
         let _ = std::fs::remove_file(path);

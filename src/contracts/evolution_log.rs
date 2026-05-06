@@ -1,0 +1,40 @@
+use serde::{Deserialize, Serialize};
+
+pub use crate::contracts::validation::ValidationStatus;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvolutionStatus {
+    Passed,
+    Failed,
+    Candidate,
+    Promoted,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvolutionLogEntry {
+    pub run_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hypothesis_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub objective: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub graph_evidence: Vec<String>,
+    pub mutation_id: String,
+    pub status: EvolutionStatus,
+    pub target_file: String,
+    pub mutation_kind: String,
+    pub risk: f32,
+    pub score: f32,
+    pub cargo_check_ok: bool,
+    pub cargo_test_ok: bool,
+    pub cargo_run_ok: bool,
+    pub retained_in_core: bool,
+    pub sandbox_destroyed: bool,
+    pub stdout_digest: String,
+    pub stderr_digest: String,
+    pub stderr_tail: String,
+    pub timestamp_unix: u64,
+}
