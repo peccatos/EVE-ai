@@ -1,9 +1,10 @@
 use eva_runtime_with_task_validator::{
-    autonomy_status, build_project_phase_runtime_output, candidate_diff, ingest_repo_patterns,
-    learning_summary, list_candidates, load_metrics, print_benchmark, print_last_report,
-    print_report, promote_candidate, refresh_metrics, refresh_report, render_plans,
-    replay_candidate, review_candidate, run_benchmark, run_evolution_cycle, run_planned_cycles,
-    run_planned_evolution_cycle, run_repo_patch_report, serve_runtime_daemon,
+    autonomy_status, build_project_phase_runtime_output, candidate_diff, distill_patterns,
+    ingest_repo_patterns, learning_summary, list_candidates, load_metrics, print_benchmark,
+    print_campaign, print_last_campaign_report, print_last_report, print_report, promote_candidate,
+    refresh_metrics, refresh_report, render_plans, replay_candidate, review_candidate,
+    run_benchmark, run_evolution_cycle, run_planned_cycles, run_planned_evolution_cycle,
+    run_repo_patch_report, run_stored_campaign, run_task_from_path, serve_runtime_daemon,
     should_run_repo_patch_mode, CycleInput, RepoPatchCliConfig, RuntimeCliCommand,
     RuntimeCycleRunner, RUNTIME_CLI_HELP,
 };
@@ -197,6 +198,49 @@ fn main() {
                 Ok(output) => println!("{output}"),
                 Err(err) => {
                     eprintln!("list_candidates_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::RunTask(path)) => {
+            match run_task_from_path(".", "memory", &path) {
+                Ok(campaign) => println!("{}", print_campaign(&campaign)),
+                Err(err) => {
+                    eprintln!("run_task_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::Campaign(task_id)) => {
+            match run_stored_campaign(".", "memory", &task_id) {
+                Ok(campaign) => println!("{}", print_campaign(&campaign)),
+                Err(err) => {
+                    eprintln!("campaign_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::LastCampaignReport) => {
+            match print_last_campaign_report("memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("last_campaign_report_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::DistillPatterns) => {
+            match distill_patterns("memory") {
+                Ok(summary) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&summary).expect("serialize pattern summary")
+                ),
+                Err(err) => {
+                    eprintln!("distill_patterns_error: {err}");
                     std::process::exit(1);
                 }
             }

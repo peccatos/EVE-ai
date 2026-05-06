@@ -1,4 +1,6 @@
-use crate::contracts::{CommandResult, MutationContract, MutationObjective, SandboxResult};
+use crate::contracts::{
+    CommandResult, MutationContract, MutationObjective, SandboxResult, TaskContract,
+};
 use crate::evolution::{
     dedup, generator, memory, metrics, mutator, regression_memory, scorer, success_memory,
     validator, write_report, EvolutionScore, LearningContext,
@@ -32,7 +34,15 @@ pub fn run_evolution_cycle_with_memory(
 }
 
 pub fn run_planned_evolution_cycle(project_root: &str, memory_root: &str) -> Result<(), String> {
-    let plans = crate::graph::analyzer::propose_mutation_plans(memory_root)?;
+    run_planned_evolution_cycle_for_task(project_root, memory_root, None)
+}
+
+pub fn run_planned_evolution_cycle_for_task(
+    project_root: &str,
+    memory_root: &str,
+    task: Option<&TaskContract>,
+) -> Result<(), String> {
+    let plans = crate::graph::analyzer::propose_mutation_plans_for_task(memory_root, task)?;
     let learning = LearningContext::load(memory_root)?;
     let hypotheses = crate::evolution::rank_plans(&plans, &learning);
     let Some(hypothesis) = hypotheses.first() else {
@@ -43,6 +53,16 @@ pub fn run_planned_evolution_cycle(project_root: &str, memory_root: &str) -> Res
         .find(|plan| plan.id == hypothesis.plan_id)
         .ok_or_else(|| "ranked hypothesis points to missing plan".to_string())?;
     let mutation = generator::generate_from_plan(plan);
+    validator::validate_mutation(&mutation)?;
+    let mutation = generator::generate_from_plan(plan);
+    if let Some(task) = task {
+        if mutation.risk > task.max_risk {
+            return Err("planned mutation exceeds task max_risk".to_string());
+        }
+        if mutation.expected_gain < 0.0 {
+            return Err("invalid mutation expected_gain".to_string());
+        }
+    }
     validator::validate_mutation(&mutation)?;
     run_evolution_cycle_with_mutation(
         project_root,

@@ -1,11 +1,18 @@
 use std::path::Path;
 
-use crate::contracts::{MutationKind, MutationObjective, MutationPlan};
+use crate::contracts::{MutationKind, MutationObjective, MutationPlan, TaskContract};
 use crate::evolution::generator::default_kind_for_objective;
-use crate::evolution::LearningContext;
+use crate::evolution::{matches_target_patterns, LearningContext};
 use crate::graph::load_graph;
 
 pub fn propose_mutation_plans(memory_root: &str) -> Result<Vec<MutationPlan>, String> {
+    propose_mutation_plans_for_task(memory_root, None)
+}
+
+pub fn propose_mutation_plans_for_task(
+    memory_root: &str,
+    task: Option<&TaskContract>,
+) -> Result<Vec<MutationPlan>, String> {
     let graph = load_graph(&Path::new(memory_root).join("graph.json"))?;
     let learning = LearningContext::load(memory_root).unwrap_or_default();
     let mut safe_files = graph
@@ -43,6 +50,9 @@ pub fn propose_mutation_plans(memory_root: &str) -> Result<Vec<MutationPlan>, St
         let objective = objective_for_file(&file);
         let mutation_kind = kind_for_file(&file, objective);
         let target_file = target_for_kind(&file, mutation_kind);
+        if !task_allows(task, &target_file, objective, mutation_kind) {
+            continue;
+        }
         let regression_penalty = learning
             .file_learning_bias(&target_file, &kind_label(mutation_kind))
             .min(0.0)
@@ -60,20 +70,48 @@ pub fn propose_mutation_plans(memory_root: &str) -> Result<Vec<MutationPlan>, St
         if success_bonus > 0.0 {
             graph_evidence.push(format!("learning:success_bonus:{:.2}", success_bonus));
         }
+        let expected_gain = (expected_gain(objective) + success_bonus * 0.05).clamp(0.0, 1.0);
+        let estimated_risk = (0.12 + regression_penalty * 0.08).clamp(0.0, 1.0);
+        if task.is_some_and(|value| estimated_risk > value.max_risk) {
+            continue;
+        }
         plans.push(MutationPlan {
             id: format!("plan:{}", file.replace('/', "_").replace('.', "_")),
             objective,
             target_file,
             mutation_kind,
             reason: format!("graph-guided safe improvement for {file}"),
-            expected_gain: (expected_gain(objective) + success_bonus * 0.05).clamp(0.0, 1.0),
-            estimated_risk: (0.12 + regression_penalty * 0.08).clamp(0.0, 1.0),
+            expected_gain,
+            estimated_risk,
             evidence_weight: if graph_evidence.is_empty() { 0.0 } else { 0.2 },
             graph_evidence,
         });
     }
     plans.sort_by(|left, right| left.id.cmp(&right.id));
     Ok(plans)
+}
+
+pub fn render_task_plans(memory_root: &str, task: &TaskContract) -> Result<String, String> {
+    let plans = propose_mutation_plans_for_task(memory_root, Some(task))?;
+    let learning = LearningContext::load(memory_root)?;
+    let hypotheses = crate::evolution::rank_plans(&plans, &learning);
+    if hypotheses.is_empty() {
+        return Ok("(none)".to_string());
+    }
+    Ok(hypotheses
+        .iter()
+        .take(5)
+        .map(|hypothesis| {
+            format!(
+                "{} objective={:?} target={} final_priority={:.2}",
+                hypothesis.plan_id,
+                hypothesis.objective,
+                hypothesis.target_file,
+                hypothesis.final_priority
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n"))
 }
 
 pub fn render_plans(memory_root: &str) -> Result<String, String> {
@@ -125,6 +163,8 @@ fn objective_for_file(file: &str) -> MutationObjective {
         MutationObjective::ImproveValidation
     } else if file.contains("replay") || file.contains("promotion") {
         MutationObjective::ImproveReplayability
+    } else if file.contains("metrics") || file.contains("learning") || file.contains("report") {
+        MutationObjective::ImproveGraphMemory
     } else if file.contains("graph") {
         MutationObjective::ImproveGraphMemory
     } else if file.contains("test") {
@@ -171,4 +211,32 @@ fn expected_gain(objective: MutationObjective) -> f32 {
 
 fn kind_label(kind: MutationKind) -> String {
     format!("{:?}", kind).to_ascii_lowercase()
+}
+
+fn task_allows(
+    task: Option<&TaskContract>,
+    target_file: &str,
+    objective: MutationObjective,
+    mutation_kind: MutationKind,
+) -> bool {
+    let Some(task) = task else {
+        return true;
+    };
+    if !task.allowed_targets.is_empty()
+        && !matches_target_patterns(target_file, &task.allowed_targets)
+    {
+        return false;
+    }
+    if matches_target_patterns(target_file, &task.forbidden_targets) {
+        return false;
+    }
+    if !task.preferred_objectives.is_empty() && !task.preferred_objectives.contains(&objective) {
+        return false;
+    }
+    if !task.allowed_mutation_kinds.is_empty()
+        && !task.allowed_mutation_kinds.contains(&mutation_kind)
+    {
+        return false;
+    }
+    true
 }

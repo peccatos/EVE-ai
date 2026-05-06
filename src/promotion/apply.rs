@@ -32,8 +32,12 @@ pub fn list_candidates(memory_root: &str) -> Result<String, String> {
                 .as_ref()
                 .map(|review| review.promotion_allowed)
                 .unwrap_or(false);
+            let blocker_reason = review
+                .as_ref()
+                .and_then(|review| review.promotion_ready_reason.clone())
+                .unwrap_or_else(|| "ready".to_string());
             format!(
-                "{} score={:.1} risk={:.2} kind={} useful={} replay_status={} promotion_ready={} target={} report={}",
+                "{} score={:.1} risk={:.2} kind={} useful={} replay_status={} promotion_ready={} reason={} target={} report={}",
                 summary.run_id,
                 summary.score,
                 summary.risk,
@@ -41,6 +45,7 @@ pub fn list_candidates(memory_root: &str) -> Result<String, String> {
                 summary.useful_change,
                 replay_status,
                 promotion_ready,
+                blocker_reason,
                 summary.target_file,
                 if report_path.exists() {
                     report_path.display().to_string()

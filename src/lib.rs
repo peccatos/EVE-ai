@@ -28,21 +28,24 @@ pub use benchmark_metrics::{BenchmarkAggregateMetrics, BenchmarkCaseMetrics};
 pub use benchmark_report::{BenchmarkBatchReport, DEFAULT_BATCH_REPORT_PATH};
 pub use benchmark_runner::BenchmarkRunner;
 pub use contracts::{
-    CommandResult, EvolutionLogEntry, EvolutionReport, MutationContract, MutationKind,
-    MutationObjective, MutationPlan, SandboxResult, ValidationStatus,
+    CommandResult, DeniedMutationKind, EvolutionLogEntry, EvolutionReport, MutationContract,
+    MutationKind, MutationObjective, MutationPlan, SandboxResult, TaskContract, ValidationStatus,
 };
 pub use evolution::{
-    apply_mutation, autonomy_status, count_sandbox_leaks, generate_from_plan,
+    apply_mutation, autonomy_status, count_sandbox_leaks, distill_patterns, generate_from_plan,
     generate_safe_mutation, learning_summary, load_metrics, load_report_json, print_benchmark,
-    print_last_report, print_report, rank_plans, record_evolution, refresh_metrics, refresh_report,
-    run_benchmark, run_planned_cycles, score_cycle, update_metrics_after_log, validate_mutation,
-    write_report, AutonomyStatus, EvolutionBenchmark, EvolutionHypothesis, EvolutionMetrics,
-    EvolutionScore, LearningContext,
+    print_campaign, print_last_campaign_report, print_last_report, print_report, rank_plans,
+    record_evolution, refresh_metrics, refresh_report, run_benchmark, run_planned_cycles,
+    run_stored_campaign, run_task_from_path, score_cycle, update_metrics_after_log,
+    validate_mutation, validate_task_contract, write_report, AutonomyStatus,
+    DistilledPatternSummary, EvolutionBenchmark, EvolutionCampaign, EvolutionHypothesis,
+    EvolutionMetrics, EvolutionScore, LearningContext,
 };
 pub use github_tool_contract::{DiscoveryConfig, GithubRepositorySummary, GithubSearchFixture};
 pub use github_tool_executor::GithubToolExecutor;
 pub use graph::{
-    analyzer::propose_mutation_plans, analyzer::render_plans, ast_extract::extract_rust_ast,
+    analyzer::propose_mutation_plans, analyzer::propose_mutation_plans_for_task,
+    analyzer::render_plans, analyzer::render_task_plans, ast_extract::extract_rust_ast,
     ingest_repo_patterns, update_graph_for_evolution, EvolutionGraph,
 };
 pub use local_model::{
@@ -66,6 +69,7 @@ pub use repo_patch_report::{
 };
 pub use runtime::{
     run_evolution_cycle, run_evolution_cycle_with_memory, run_planned_evolution_cycle,
+    run_planned_evolution_cycle_for_task,
 };
 pub use runtime_cycle::{CycleInput, RuntimeAudit, RuntimeCycleReport, RuntimeCycleRunner};
 pub use runtime_daemon::{

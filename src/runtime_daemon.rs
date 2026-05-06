@@ -77,6 +77,18 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
   cargo run -- --ingest-repo <PATH>
       Read local Rust repo patterns into memory/graph.json without mutating the repo.
 
+  cargo run -- --run-task <PATH_TO_TASK_JSON>
+      Validate, persist, and run a bounded evolution campaign from a task contract.
+
+  cargo run -- --campaign <TASK_ID>
+      Run a stored bounded evolution campaign by task id.
+
+  cargo run -- --last-campaign-report
+      Print the latest Russian campaign report.
+
+  cargo run -- --distill-patterns
+      Distill local-only successful and risky evolution patterns into memory/patterns/.
+
   cargo run -- --serve [--config eva.runtime.json]
       Start the HTTP runtime daemon. Defaults to 127.0.0.1:8765.
 
@@ -115,6 +127,10 @@ pub enum RuntimeCliCommand {
     Replay(String),
     Promote(String),
     IngestRepo(String),
+    RunTask(String),
+    Campaign(String),
+    LastCampaignReport,
+    DistillPatterns,
     Serve(RuntimeDaemonConfig),
 }
 
@@ -235,6 +251,12 @@ impl RuntimeCliCommand {
         if raw_args == ["--list-candidates"] {
             return Ok(Self::ListCandidates);
         }
+        if raw_args == ["--last-campaign-report"] {
+            return Ok(Self::LastCampaignReport);
+        }
+        if raw_args == ["--distill-patterns"] {
+            return Ok(Self::DistillPatterns);
+        }
         if raw_args.len() == 2 && raw_args[0] == "--report" {
             return Ok(Self::Report(raw_args[1].clone()));
         }
@@ -267,6 +289,12 @@ impl RuntimeCliCommand {
         }
         if raw_args.len() == 2 && raw_args[0] == "--ingest-repo" {
             return Ok(Self::IngestRepo(raw_args[1].clone()));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--run-task" {
+            return Ok(Self::RunTask(raw_args[1].clone()));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--campaign" {
+            return Ok(Self::Campaign(raw_args[1].clone()));
         }
 
         let config_path = parse_config_path(&raw_args)?;
