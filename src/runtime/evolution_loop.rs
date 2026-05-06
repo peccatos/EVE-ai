@@ -1,5 +1,8 @@
 use crate::contracts::{CommandResult, MutationContract, MutationObjective, SandboxResult};
-use crate::evolution::{generator, memory, metrics, mutator, scorer, validator};
+use crate::evolution::{
+    dedup, generator, memory, metrics, mutator, regression_memory, scorer, success_memory,
+    validator, write_report, EvolutionScore, LearningContext,
+};
 use crate::sandbox::{manager, runner, snapshot};
 
 #[derive(Debug, Clone)]
@@ -8,6 +11,8 @@ struct PlanContext {
     hypothesis_id: Option<String>,
     objective: Option<MutationObjective>,
     graph_evidence: Vec<String>,
+    regression_penalty: f32,
+    success_bonus: f32,
 }
 
 pub fn run_evolution_cycle(project_root: &str) -> Result<(), String> {
@@ -28,7 +33,8 @@ pub fn run_evolution_cycle_with_memory(
 
 pub fn run_planned_evolution_cycle(project_root: &str, memory_root: &str) -> Result<(), String> {
     let plans = crate::graph::analyzer::propose_mutation_plans(memory_root)?;
-    let hypotheses = crate::evolution::rank_plans(&plans);
+    let learning = LearningContext::load(memory_root)?;
+    let hypotheses = crate::evolution::rank_plans(&plans, &learning);
     let Some(hypothesis) = hypotheses.first() else {
         return Err("no graph-guided plans available".to_string());
     };
@@ -47,6 +53,8 @@ pub fn run_planned_evolution_cycle(project_root: &str, memory_root: &str) -> Res
             hypothesis_id: Some(hypothesis.id.clone()),
             objective: Some(plan.objective),
             graph_evidence: plan.graph_evidence.clone(),
+            regression_penalty: hypothesis.regression_penalty,
+            success_bonus: hypothesis.success_bonus,
         }),
     )
 }
@@ -58,13 +66,82 @@ fn run_evolution_cycle_with_mutation(
     plan_context: Option<PlanContext>,
 ) -> Result<(), String> {
     let run_id = memory::new_run_id();
+    let mutation_digest = dedup::compute_mutation_digest(&mutation);
+    if dedup::should_reject_duplicate_bad(memory_root, &mutation_digest)? {
+        let score = duplicate_rejected_score();
+        let sandbox = empty_sandbox_result();
+        let preliminary = if let Some(context) = &plan_context {
+            memory::build_log_entry_with_plan(
+                run_id.clone(),
+                context.plan_id.clone(),
+                context.hypothesis_id.clone(),
+                context.objective.map(|objective| format!("{objective:?}")),
+                context.graph_evidence.clone(),
+                &mutation,
+                mutation_digest.clone(),
+                &score,
+                &sandbox,
+                false,
+                true,
+                true,
+                context.regression_penalty,
+                context.success_bonus,
+            )
+        } else {
+            memory::build_log_entry_with_plan(
+                run_id.clone(),
+                None,
+                None,
+                None,
+                Vec::new(),
+                &mutation,
+                mutation_digest.clone(),
+                &score,
+                &sandbox,
+                false,
+                true,
+                true,
+                0.0,
+                0.0,
+            )
+        };
+        let regression = regression_memory::record_regression(memory_root, &preliminary)?;
+        let final_entry = with_learning_adjustments(
+            preliminary,
+            regression.penalty
+                + plan_context
+                    .as_ref()
+                    .map(|ctx| ctx.regression_penalty)
+                    .unwrap_or(0.0),
+            plan_context
+                .as_ref()
+                .map(|ctx| ctx.success_bonus)
+                .unwrap_or(0.0),
+        );
+        memory::append_jsonl(
+            std::path::Path::new(memory_root).join("evolution.jsonl"),
+            &final_entry,
+        )?;
+        write_report(memory_root, &final_entry, &mutation)?;
+        dedup::record_dedup_entry(
+            memory_root,
+            &mutation_digest,
+            &mutation,
+            final_entry.score,
+            final_entry.useful_change,
+            &run_id,
+        )?;
+        metrics::update_metrics_after_log(memory_root, &final_entry)?;
+        return Err("duplicate bad mutation rejected before sandbox".to_string());
+    }
+
     let sandbox_path = manager::create_sandbox_path();
     snapshot::copy_project(project_root, &sandbox_path)?;
 
     let result = run_cycle_in_sandbox(&sandbox_path, mutation);
     let cleanup = manager::destroy_sandbox(&sandbox_path);
     if let Ok((mutation, score, sandbox)) = &result {
-        let entry = if let Some(context) = &plan_context {
+        let preliminary = if let Some(context) = &plan_context {
             memory::build_log_entry_with_plan(
                 run_id,
                 context.plan_id.clone(),
@@ -72,19 +149,67 @@ fn run_evolution_cycle_with_mutation(
                 context.objective.map(|objective| format!("{objective:?}")),
                 context.graph_evidence.clone(),
                 mutation,
+                mutation_digest.clone(),
+                score,
+                sandbox,
+                false,
+                cleanup.is_ok(),
+                false,
+                context.regression_penalty,
+                context.success_bonus,
+            )
+        } else {
+            memory::build_log_entry(
+                run_id,
+                mutation,
+                mutation_digest.clone(),
                 score,
                 sandbox,
                 false,
                 cleanup.is_ok(),
             )
-        } else {
-            memory::build_log_entry(run_id, mutation, score, sandbox, false, cleanup.is_ok())
         };
+        dedup::record_dedup_entry(
+            memory_root,
+            &mutation_digest,
+            mutation,
+            preliminary.score,
+            preliminary.useful_change,
+            &preliminary.run_id,
+        )?;
+        let regression_penalty = if !preliminary.useful_change
+            || preliminary.status == crate::contracts::EvolutionStatus::Failed
+        {
+            regression_memory::record_regression(memory_root, &preliminary)?.penalty
+        } else {
+            0.0
+        };
+        let success_bonus = if preliminary.useful_change
+            && preliminary.status == crate::contracts::EvolutionStatus::Candidate
+        {
+            success_memory::record_success_pattern(memory_root, &preliminary)?.bonus
+        } else {
+            0.0
+        };
+        let entry = with_learning_adjustments(
+            preliminary,
+            regression_penalty
+                + plan_context
+                    .as_ref()
+                    .map(|ctx| ctx.regression_penalty)
+                    .unwrap_or(0.0),
+            success_bonus
+                + plan_context
+                    .as_ref()
+                    .map(|ctx| ctx.success_bonus)
+                    .unwrap_or(0.0),
+        );
         memory::append_jsonl(
             std::path::Path::new(memory_root).join("evolution.jsonl"),
             &entry,
         )?;
         memory::maybe_store_candidate(memory_root, &entry, mutation)?;
+        write_report(memory_root, &entry, mutation)?;
         crate::graph::update_graph_for_evolution(memory_root, &entry)?;
         metrics::update_metrics_after_log(memory_root, &entry)?;
     }
@@ -129,7 +254,7 @@ fn run_cycle_in_sandbox(
         None
     };
 
-    let score = scorer::score_cycle(&check, &test, run.as_ref());
+    let score = scorer::score_cycle(mutation.kind, &check, &test, run.as_ref());
     let sandbox = SandboxResult {
         sandbox_path: sandbox_path.to_string(),
         check,
@@ -146,4 +271,36 @@ fn failed_command(stderr: &str) -> CommandResult {
         stderr: stderr.to_string(),
         duration_ms: 0,
     }
+}
+
+fn duplicate_rejected_score() -> EvolutionScore {
+    EvolutionScore {
+        accepted: false,
+        score: 0.0,
+        useful_change: false,
+        non_candidate_reason: Some("duplicate_bad_mutation".to_string()),
+        check_passed: false,
+        test_passed: false,
+        run_passed: false,
+        total_duration_ms: 0,
+    }
+}
+
+fn empty_sandbox_result() -> SandboxResult {
+    SandboxResult {
+        sandbox_path: String::new(),
+        check: failed_command("sandbox skipped due to duplicate rejection"),
+        test: None,
+        run: None,
+    }
+}
+
+fn with_learning_adjustments(
+    mut entry: crate::contracts::EvolutionLogEntry,
+    regression_penalty: f32,
+    success_bonus: f32,
+) -> crate::contracts::EvolutionLogEntry {
+    entry.regression_penalty = regression_penalty;
+    entry.success_bonus = success_bonus;
+    entry
 }

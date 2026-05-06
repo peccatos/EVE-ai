@@ -58,6 +58,49 @@ pub fn validate_mutation(mutation: &MutationContract) -> Result<(), String> {
                 return Err("metric field mutation is comment-only in this phase".to_string());
             }
         }
+        MutationKind::AddUnitTest | MutationKind::AddReplayAssertion => {
+            let append = mutation
+                .append
+                .as_ref()
+                .ok_or_else(|| "generated test mutation requires append payload".to_string())?;
+            if !mutation.target_file.starts_with("tests/") {
+                return Err("generated test target must be inside tests/".to_string());
+            }
+            if !append.contains("#[test]") || !append.contains("fn ") {
+                return Err("generated test mutation must contain a test function".to_string());
+            }
+        }
+        MutationKind::AddLearningSummaryField => {
+            require_search_replace(
+                mutation,
+                "learning summary field mutation requires search and replace",
+            )?;
+            if !mutation.target_file.contains("learning")
+                && !mutation.target_file.contains("report")
+                && mutation.target_file != "src/evolution/metrics.rs"
+            {
+                return Err(
+                    "learning summary field target must be learning/report related".to_string(),
+                );
+            }
+        }
+        MutationKind::AddMetricUpdate => {
+            require_search_replace(
+                mutation,
+                "metric update mutation requires search and replace",
+            )?;
+            if mutation.target_file == "src/evolution/metrics.rs"
+                || mutation.target_file.starts_with("src/evolution/")
+                || mutation.target_file.starts_with("src/runtime")
+            {
+                // allowed
+            } else {
+                return Err(
+                    "metric update target must be metrics or safe evolution/runtime file"
+                        .to_string(),
+                );
+            }
+        }
     }
 
     Ok(())
@@ -72,11 +115,18 @@ fn validate_target_path(target_file: &str, kind: MutationKind) -> Result<(), Str
         return Err("Cargo.toml mutation is forbidden in this phase".to_string());
     }
     let allowed_prefix = match kind {
-        MutationKind::AddTestSkeleton => target_file.starts_with("tests/"),
+        MutationKind::AddTestSkeleton
+        | MutationKind::AddUnitTest
+        | MutationKind::AddReplayAssertion => target_file.starts_with("tests/"),
         _ => target_file.starts_with("src/"),
     };
     if !allowed_prefix {
-        return Err("target file must be inside an allowed source directory".to_string());
+        return Err(match kind {
+            MutationKind::AddTestSkeleton
+            | MutationKind::AddUnitTest
+            | MutationKind::AddReplayAssertion => "target file must be inside tests/".to_string(),
+            _ => "target file must be inside an allowed source directory".to_string(),
+        });
     }
     if target_file.contains("src/core/")
         || target_file == "src/lib.rs"

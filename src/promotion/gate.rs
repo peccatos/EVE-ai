@@ -10,6 +10,9 @@ pub struct PromotionDecision {
 }
 
 pub fn check_promotion_gate(mutation: &MutationContract, score: f32) -> PromotionDecision {
+    if matches!(mutation.kind, crate::contracts::MutationKind::AppendComment) {
+        return reject("append comment mutations are cosmetic and cannot be promoted");
+    }
     if score < PROMOTION_THRESHOLD {
         return reject("candidate score below promotion threshold");
     }

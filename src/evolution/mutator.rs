@@ -8,7 +8,14 @@ pub fn apply_mutation(base_dir: &str, mutation: &MutationContract) -> Result<(),
     validate_mutation(mutation)?;
 
     let path = Path::new(base_dir).join(&mutation.target_file);
-    if !path.exists() && mutation.kind != MutationKind::AddTestSkeleton {
+    if !path.exists()
+        && !matches!(
+            mutation.kind,
+            MutationKind::AddTestSkeleton
+                | MutationKind::AddUnitTest
+                | MutationKind::AddReplayAssertion
+        )
+    {
         return Err(format!(
             "target file does not exist: {}",
             mutation.target_file
@@ -32,7 +39,9 @@ pub fn apply_mutation(base_dir: &str, mutation: &MutationContract) -> Result<(),
     match mutation.kind {
         MutationKind::AppendComment
         | MutationKind::AddMetricField
-        | MutationKind::AddTestSkeleton => {
+        | MutationKind::AddTestSkeleton
+        | MutationKind::AddUnitTest
+        | MutationKind::AddReplayAssertion => {
             let append = mutation
                 .append
                 .as_ref()
@@ -41,7 +50,10 @@ pub fn apply_mutation(base_dir: &str, mutation: &MutationContract) -> Result<(),
             content.push_str(append);
             content.push('\n');
         }
-        MutationKind::ReplaceText | MutationKind::ParameterTune => {
+        MutationKind::ReplaceText
+        | MutationKind::ParameterTune
+        | MutationKind::AddLearningSummaryField
+        | MutationKind::AddMetricUpdate => {
             let search = mutation
                 .search
                 .as_ref()

@@ -1,4 +1,8 @@
 use crate::contracts::{MutationContract, MutationKind, MutationObjective, MutationPlan};
+use crate::evolution::templates::{
+    generate_add_learning_summary_field, generate_add_metric_update, generate_add_replay_assertion,
+    generate_add_unit_test,
+};
 
 pub fn generate_safe_mutation() -> MutationContract {
     MutationContract {
@@ -15,6 +19,20 @@ pub fn generate_safe_mutation() -> MutationContract {
 }
 
 pub fn generate_from_plan(plan: &MutationPlan) -> MutationContract {
+    match plan.mutation_kind {
+        MutationKind::AddUnitTest => return generate_add_unit_test(plan),
+        MutationKind::AddReplayAssertion => return generate_add_replay_assertion(plan),
+        MutationKind::AddLearningSummaryField => return generate_add_learning_summary_field(plan),
+        MutationKind::AddMetricUpdate => return generate_add_metric_update(plan),
+        MutationKind::AddTestSkeleton => {
+            return generate_add_unit_test(plan);
+        }
+        MutationKind::AddMetricField => {
+            return generate_add_metric_update(plan);
+        }
+        _ => {}
+    }
+
     let (search, replace, append) = match plan.mutation_kind {
         MutationKind::AppendComment => (
             None,
@@ -34,19 +52,12 @@ pub fn generate_from_plan(plan: &MutationPlan) -> MutationContract {
             Some("risk: 0.09".to_string()),
             None,
         ),
-        MutationKind::AddTestSkeleton => (
-            None,
-            None,
-            Some(format!(
-                "\n#[test]\nfn eva_generated_{}_skeleton() {{\n    assert!(true);\n}}\n",
-                plan.id.replace('-', "_").replace(':', "_")
-            )),
-        ),
-        MutationKind::AddMetricField => (
-            None,
-            None,
-            Some("// EVA metric placeholder: planned compact metric extension.".to_string()),
-        ),
+        MutationKind::AddTestSkeleton
+        | MutationKind::AddMetricField
+        | MutationKind::AddUnitTest
+        | MutationKind::AddReplayAssertion
+        | MutationKind::AddLearningSummaryField
+        | MutationKind::AddMetricUpdate => unreachable!("handled by bounded templates"),
     };
 
     MutationContract {
@@ -68,11 +79,17 @@ pub fn generate_from_plan(plan: &MutationPlan) -> MutationContract {
 
 pub fn default_kind_for_objective(objective: MutationObjective) -> MutationKind {
     match objective {
-        MutationObjective::ImproveTests => MutationKind::AddTestSkeleton,
-        MutationObjective::ImproveScoring | MutationObjective::ReduceStorage => {
-            MutationKind::AddMetricField
+        MutationObjective::ImproveTests | MutationObjective::ImproveValidation => {
+            MutationKind::AddUnitTest
         }
-        _ => MutationKind::AppendComment,
+        MutationObjective::ImproveReplayability => MutationKind::AddReplayAssertion,
+        MutationObjective::ImproveGraphMemory | MutationObjective::ImproveScoring => {
+            MutationKind::AddMetricUpdate
+        }
+        MutationObjective::ReduceStorage => MutationKind::AddLearningSummaryField,
+        MutationObjective::ImproveReliability | MutationObjective::ReduceRuntimeCost => {
+            MutationKind::AddUnitTest
+        }
     }
 }
 

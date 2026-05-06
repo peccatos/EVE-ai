@@ -28,13 +28,16 @@ pub use benchmark_metrics::{BenchmarkAggregateMetrics, BenchmarkCaseMetrics};
 pub use benchmark_report::{BenchmarkBatchReport, DEFAULT_BATCH_REPORT_PATH};
 pub use benchmark_runner::BenchmarkRunner;
 pub use contracts::{
-    CommandResult, EvolutionLogEntry, MutationContract, MutationKind, MutationObjective,
-    MutationPlan, SandboxResult, ValidationStatus,
+    CommandResult, EvolutionLogEntry, EvolutionReport, MutationContract, MutationKind,
+    MutationObjective, MutationPlan, SandboxResult, ValidationStatus,
 };
 pub use evolution::{
-    apply_mutation, generate_from_plan, generate_safe_mutation, load_metrics, rank_plans,
-    record_evolution, score_cycle, update_metrics_after_log, validate_mutation,
-    EvolutionHypothesis, EvolutionMetrics, EvolutionScore,
+    apply_mutation, autonomy_status, count_sandbox_leaks, generate_from_plan,
+    generate_safe_mutation, learning_summary, load_metrics, load_report_json, print_benchmark,
+    print_last_report, print_report, rank_plans, record_evolution, refresh_metrics, refresh_report,
+    run_benchmark, run_planned_cycles, score_cycle, update_metrics_after_log, validate_mutation,
+    write_report, AutonomyStatus, EvolutionBenchmark, EvolutionHypothesis, EvolutionMetrics,
+    EvolutionScore, LearningContext,
 };
 pub use github_tool_contract::{DiscoveryConfig, GithubRepositorySummary, GithubSearchFixture};
 pub use github_tool_executor::GithubToolExecutor;
@@ -53,7 +56,9 @@ pub use project_phase_report::{
     ProjectPhaseRuntimeOutput, ProjectPhaseStatus,
 };
 pub use promotion::{
-    check_promotion_gate, list_candidates, promote_candidate, replay_candidate, PromotionDecision,
+    candidate_diff, check_promotion_gate, list_candidates, promote_candidate, replay_candidate,
+    review_candidate, review_report_markdown, CandidateReview, CandidateReviewReport,
+    PromotionDecision,
 };
 pub use repo_patch_report::{
     run_repo_patch_report, should_run_repo_patch_mode, RepoChangeType, RepoChangedFile,

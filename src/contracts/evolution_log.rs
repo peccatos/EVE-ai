@@ -23,11 +23,23 @@ pub struct EvolutionLogEntry {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub graph_evidence: Vec<String>,
     pub mutation_id: String,
+    #[serde(default)]
+    pub mutation_digest: String,
     pub status: EvolutionStatus,
     pub target_file: String,
     pub mutation_kind: String,
     pub risk: f32,
     pub score: f32,
+    #[serde(default)]
+    pub useful_change: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub non_candidate_reason: Option<String>,
+    #[serde(default)]
+    pub duplicate_rejected: bool,
+    #[serde(default)]
+    pub regression_penalty: f32,
+    #[serde(default)]
+    pub success_bonus: f32,
     pub cargo_check_ok: bool,
     pub cargo_test_ok: bool,
     pub cargo_run_ok: bool,

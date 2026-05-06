@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use eva_runtime_with_task_validator::contracts::{MutationKind, MutationObjective, MutationPlan};
 use eva_runtime_with_task_validator::{
     extract_rust_ast, generate_from_plan, ingest_repo_patterns, propose_mutation_plans, rank_plans,
-    validate_mutation,
+    validate_mutation, LearningContext,
 };
 
 #[test]
@@ -74,8 +74,9 @@ fn hypothesis_ranking_is_deterministic() {
         plan("plan:c", 0.7, 0.1, 0.0),
     ];
 
-    let first = rank_plans(&plans);
-    let second = rank_plans(&plans);
+    let learning = LearningContext::default();
+    let first = rank_plans(&plans, &learning);
+    let second = rank_plans(&plans, &learning);
 
     assert_eq!(first, second);
     assert_eq!(first[0].plan_id, "plan:c");
@@ -98,7 +99,11 @@ fn generate_from_plan_returns_validator_safe_mutation() {
 
     let mutation = generate_from_plan(&plan);
     validate_mutation(&mutation).expect("validator-safe mutation");
-    assert_eq!(mutation.kind, MutationKind::AddTestSkeleton);
+    assert!(matches!(
+        mutation.kind,
+        MutationKind::AddTestSkeleton | MutationKind::AddUnitTest
+    ));
+    assert!(mutation.target_file.starts_with("tests/"));
 }
 
 #[test]

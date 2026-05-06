@@ -2,10 +2,12 @@ use std::path::Path;
 
 use crate::contracts::{MutationKind, MutationObjective, MutationPlan};
 use crate::evolution::generator::default_kind_for_objective;
+use crate::evolution::LearningContext;
 use crate::graph::load_graph;
 
 pub fn propose_mutation_plans(memory_root: &str) -> Result<Vec<MutationPlan>, String> {
     let graph = load_graph(&Path::new(memory_root).join("graph.json"))?;
+    let learning = LearningContext::load(memory_root).unwrap_or_default();
     let mut safe_files = graph
         .nodes
         .iter()
@@ -15,6 +17,19 @@ pub fn propose_mutation_plans(memory_root: &str) -> Result<Vec<MutationPlan>, St
         .collect::<Vec<_>>();
     safe_files.sort();
     safe_files.dedup();
+    safe_files.sort_by(|left, right| {
+        let left_objective = objective_for_file(left);
+        let right_objective = objective_for_file(right);
+        let left_kind = kind_for_file(left, left_objective);
+        let right_kind = kind_for_file(right, right_objective);
+        let left_target = target_for_kind(left, left_kind);
+        let right_target = target_for_kind(right, right_kind);
+        let left_bias = learning.file_learning_bias(&left_target, &kind_label(left_kind));
+        let right_bias = learning.file_learning_bias(&right_target, &kind_label(right_kind));
+        right_bias
+            .total_cmp(&left_bias)
+            .then_with(|| left.cmp(right))
+    });
 
     let mut plans = Vec::new();
     for file in safe_files.into_iter().take(8) {
@@ -27,16 +42,34 @@ pub fn propose_mutation_plans(memory_root: &str) -> Result<Vec<MutationPlan>, St
             .collect::<Vec<_>>();
         let objective = objective_for_file(&file);
         let mutation_kind = kind_for_file(&file, objective);
+        let target_file = target_for_kind(&file, mutation_kind);
+        let regression_penalty = learning
+            .file_learning_bias(&target_file, &kind_label(mutation_kind))
+            .min(0.0)
+            .abs();
+        let success_bonus = learning
+            .file_learning_bias(&target_file, &kind_label(mutation_kind))
+            .max(0.0);
+        let mut graph_evidence = evidence;
+        if regression_penalty > 0.0 {
+            graph_evidence.push(format!(
+                "learning:regression_penalty:{:.2}",
+                regression_penalty
+            ));
+        }
+        if success_bonus > 0.0 {
+            graph_evidence.push(format!("learning:success_bonus:{:.2}", success_bonus));
+        }
         plans.push(MutationPlan {
             id: format!("plan:{}", file.replace('/', "_").replace('.', "_")),
             objective,
-            target_file: target_for_kind(&file, mutation_kind),
+            target_file,
             mutation_kind,
             reason: format!("graph-guided safe improvement for {file}"),
-            expected_gain: expected_gain(objective),
-            estimated_risk: 0.12,
-            evidence_weight: if evidence.is_empty() { 0.0 } else { 0.2 },
-            graph_evidence: evidence,
+            expected_gain: (expected_gain(objective) + success_bonus * 0.05).clamp(0.0, 1.0),
+            estimated_risk: (0.12 + regression_penalty * 0.08).clamp(0.0, 1.0),
+            evidence_weight: if graph_evidence.is_empty() { 0.0 } else { 0.2 },
+            graph_evidence,
         });
     }
     plans.sort_by(|left, right| left.id.cmp(&right.id));
@@ -45,7 +78,8 @@ pub fn propose_mutation_plans(memory_root: &str) -> Result<Vec<MutationPlan>, St
 
 pub fn render_plans(memory_root: &str) -> Result<String, String> {
     let plans = propose_mutation_plans(memory_root)?;
-    let hypotheses = crate::evolution::rank_plans(&plans);
+    let learning = LearningContext::load(memory_root)?;
+    let hypotheses = crate::evolution::rank_plans(&plans, &learning);
     if hypotheses.is_empty() {
         return Ok("(none)".to_string());
     }
@@ -53,13 +87,25 @@ pub fn render_plans(memory_root: &str) -> Result<String, String> {
         .iter()
         .take(5)
         .map(|hypothesis| {
-            format!(
-                "{} priority={:.2} objective={:?} target={}",
+            let mut lines = vec![format!(
+                "{} objective={:?} target={} final_priority={:.2} expected_gain={:.2} estimated_risk={:.2} regression_penalty={:.2} success_bonus={:.2} duplicate_penalty={:.2}",
                 hypothesis.plan_id,
-                hypothesis.priority,
                 hypothesis.objective,
-                hypothesis.target_file
-            )
+                hypothesis.target_file,
+                hypothesis.final_priority,
+                hypothesis.expected_gain,
+                hypothesis.estimated_risk,
+                hypothesis.regression_penalty,
+                hypothesis.success_bonus,
+                hypothesis.duplicate_penalty
+            )];
+            lines.extend(
+                hypothesis
+                    .explanation
+                    .iter()
+                    .map(|line| format!("  - {line}")),
+            );
+            lines.join("\n")
         })
         .collect::<Vec<_>>()
         .join("\n"))
@@ -89,8 +135,18 @@ fn objective_for_file(file: &str) -> MutationObjective {
 }
 
 fn kind_for_file(file: &str, objective: MutationObjective) -> MutationKind {
-    if file.contains("tests/") {
-        MutationKind::AppendComment
+    if file.contains("replay") {
+        MutationKind::AddReplayAssertion
+    } else if file.contains("metrics") || file.contains("learning") || file.contains("report") {
+        match objective {
+            MutationObjective::ImproveGraphMemory | MutationObjective::ImproveScoring => {
+                MutationKind::AddMetricUpdate
+            }
+            MutationObjective::ReduceStorage => MutationKind::AddLearningSummaryField,
+            _ => default_kind_for_objective(objective),
+        }
+    } else if file.contains("tests/") {
+        MutationKind::AddUnitTest
     } else {
         default_kind_for_objective(objective)
     }
@@ -98,7 +154,9 @@ fn kind_for_file(file: &str, objective: MutationObjective) -> MutationKind {
 
 fn target_for_kind(file: &str, kind: MutationKind) -> String {
     match kind {
-        MutationKind::AddTestSkeleton => "tests/eva_generated_phase37_tests.rs".to_string(),
+        MutationKind::AddTestSkeleton
+        | MutationKind::AddUnitTest
+        | MutationKind::AddReplayAssertion => "tests/evolution_generated_tests.rs".to_string(),
         _ => file.to_string(),
     }
 }
@@ -109,4 +167,8 @@ fn expected_gain(objective: MutationObjective) -> f32 {
         MutationObjective::ImproveGraphMemory | MutationObjective::ImproveTests => 0.5,
         _ => 0.4,
     }
+}
+
+fn kind_label(kind: MutationKind) -> String {
+    format!("{:?}", kind).to_ascii_lowercase()
 }

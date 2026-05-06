@@ -32,8 +32,38 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
   cargo run -- --evolve-planned
       Run one graph-guided bounded evolution cycle in a disposable sandbox.
 
+  cargo run -- --evolve-planned-n <N>
+      Run N graph-guided bounded evolution cycles in disposable sandboxes.
+
+  cargo run -- --evolution-benchmark <N>
+      Run N planned cycles and write aggregate benchmark reports.
+
+  cargo run -- --autonomy-status
+      Print current lightweight autonomy gate status.
+
   cargo run -- --metrics
       Print compact evolution metrics.
+
+  cargo run -- --metrics-refresh
+      Recompute compact evolution metrics from logs and memory files.
+
+  cargo run -- --learning-summary
+      Print compact learning memory summary.
+
+  cargo run -- --last-report
+      Print the latest Russian evolution report.
+
+  cargo run -- --report <RUN_ID>
+      Print a specific Russian evolution report.
+
+  cargo run -- --report-refresh <RUN_ID>
+      Rebuild a Russian evolution report from stored artifacts.
+
+  cargo run -- --review-candidate <RUN_ID>
+      Print candidate review with Russian summary and promotion readiness.
+
+  cargo run -- --candidate-diff <RUN_ID>
+      Print the bounded candidate payload or search/replace diff.
 
   cargo run -- --list-candidates
       List stored manual-promotion candidates.
@@ -70,7 +100,17 @@ pub enum RuntimeCliCommand {
     Evolve,
     PlanEvolution,
     EvolvePlanned,
+    EvolvePlannedN(usize),
+    EvolutionBenchmark(usize),
+    AutonomyStatus,
     Metrics,
+    MetricsRefresh,
+    LearningSummary,
+    LastReport,
+    Report(String),
+    ReportRefresh(String),
+    ReviewCandidate(String),
+    CandidateDiff(String),
     ListCandidates,
     Replay(String),
     Promote(String),
@@ -177,11 +217,47 @@ impl RuntimeCliCommand {
         if raw_args == ["--evolve-planned"] {
             return Ok(Self::EvolvePlanned);
         }
+        if raw_args == ["--autonomy-status"] {
+            return Ok(Self::AutonomyStatus);
+        }
         if raw_args == ["--metrics"] {
             return Ok(Self::Metrics);
         }
+        if raw_args == ["--metrics-refresh"] {
+            return Ok(Self::MetricsRefresh);
+        }
+        if raw_args == ["--learning-summary"] {
+            return Ok(Self::LearningSummary);
+        }
+        if raw_args == ["--last-report"] {
+            return Ok(Self::LastReport);
+        }
         if raw_args == ["--list-candidates"] {
             return Ok(Self::ListCandidates);
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--report" {
+            return Ok(Self::Report(raw_args[1].clone()));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--report-refresh" {
+            return Ok(Self::ReportRefresh(raw_args[1].clone()));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--review-candidate" {
+            return Ok(Self::ReviewCandidate(raw_args[1].clone()));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--candidate-diff" {
+            return Ok(Self::CandidateDiff(raw_args[1].clone()));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--evolve-planned-n" {
+            return Ok(Self::EvolvePlannedN(raw_args[1].parse::<usize>().map_err(
+                |_| "--evolve-planned-n requires a positive integer".to_string(),
+            )?));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--evolution-benchmark" {
+            return Ok(Self::EvolutionBenchmark(
+                raw_args[1]
+                    .parse::<usize>()
+                    .map_err(|_| "--evolution-benchmark requires a positive integer".to_string())?,
+            ));
         }
         if raw_args.len() == 2 && raw_args[0] == "--replay" {
             return Ok(Self::Replay(raw_args[1].clone()));

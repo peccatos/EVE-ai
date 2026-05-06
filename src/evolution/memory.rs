@@ -6,7 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::contracts::{
-    sha256_digest, tail, EvolutionLogEntry, EvolutionStatus, MutationContract, SandboxResult,
+    sha256_digest, tail, EvolutionLogEntry, EvolutionStatus, MutationContract, MutationKind,
+    SandboxResult,
 };
 use crate::evolution::scorer::EvolutionScore;
 
@@ -21,11 +22,23 @@ pub const PROMOTION_RISK_LIMIT: f32 = 0.25;
 pub struct CandidateSummary {
     pub run_id: String,
     pub mutation_id: String,
+    #[serde(default)]
+    pub mutation_digest: String,
     pub status: EvolutionStatus,
     pub target_file: String,
     pub mutation_kind: String,
     pub risk: f32,
     pub score: f32,
+    #[serde(default)]
+    pub useful_change: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub non_candidate_reason: Option<String>,
+    #[serde(default)]
+    pub duplicate_rejected: bool,
+    #[serde(default)]
+    pub regression_penalty: f32,
+    #[serde(default)]
+    pub success_bonus: f32,
     pub cargo_check_ok: bool,
     pub cargo_test_ok: bool,
     pub cargo_run_ok: bool,
@@ -58,6 +71,7 @@ pub fn record_evolution(entry: &EvolutionLogEntry) -> Result<(), String> {
 pub fn build_log_entry(
     run_id: String,
     mutation: &MutationContract,
+    mutation_digest: String,
     score: &EvolutionScore,
     sandbox: &SandboxResult,
     retained_in_core: bool,
@@ -70,10 +84,14 @@ pub fn build_log_entry(
         None,
         Vec::new(),
         mutation,
+        mutation_digest,
         score,
         sandbox,
         retained_in_core,
         sandbox_destroyed,
+        false,
+        0.0,
+        0.0,
     )
 }
 
@@ -85,16 +103,20 @@ pub fn build_log_entry_with_plan(
     objective: Option<String>,
     graph_evidence: Vec<String>,
     mutation: &MutationContract,
+    mutation_digest: String,
     score: &EvolutionScore,
     sandbox: &SandboxResult,
     retained_in_core: bool,
     sandbox_destroyed: bool,
+    duplicate_rejected: bool,
+    regression_penalty: f32,
+    success_bonus: f32,
 ) -> EvolutionLogEntry {
     let stdout = combined_stdout(sandbox);
     let stderr = combined_stderr(sandbox);
     let status = if retained_in_core {
         EvolutionStatus::Promoted
-    } else if score.score >= CANDIDATE_THRESHOLD && score.accepted {
+    } else if score.score >= CANDIDATE_THRESHOLD && score.accepted && score.useful_change {
         EvolutionStatus::Candidate
     } else if score.accepted {
         EvolutionStatus::Passed
@@ -109,11 +131,17 @@ pub fn build_log_entry_with_plan(
         objective,
         graph_evidence,
         mutation_id: mutation.id.clone(),
+        mutation_digest,
         status,
         target_file: mutation.target_file.clone(),
-        mutation_kind: format!("{:?}", mutation.kind).to_ascii_lowercase(),
+        mutation_kind: mutation_kind_label(mutation.kind),
         risk: mutation.risk,
         score: score.score,
+        useful_change: score.useful_change,
+        non_candidate_reason: score.non_candidate_reason.clone(),
+        duplicate_rejected,
+        regression_penalty,
+        success_bonus,
         cargo_check_ok: score.check_passed,
         cargo_test_ok: score.test_passed,
         cargo_run_ok: score.run_passed,
@@ -131,7 +159,10 @@ pub fn maybe_store_candidate(
     entry: &EvolutionLogEntry,
     mutation: &MutationContract,
 ) -> Result<bool, String> {
-    if entry.score < CANDIDATE_THRESHOLD || entry.status == EvolutionStatus::Failed {
+    if entry.score < CANDIDATE_THRESHOLD
+        || entry.status == EvolutionStatus::Failed
+        || !entry.useful_change
+    {
         return Ok(false);
     }
     store_candidate(memory_root, entry, mutation)?;
@@ -295,11 +326,17 @@ impl From<&EvolutionLogEntry> for CandidateSummary {
         Self {
             run_id: entry.run_id.clone(),
             mutation_id: entry.mutation_id.clone(),
+            mutation_digest: entry.mutation_digest.clone(),
             status: entry.status,
             target_file: entry.target_file.clone(),
             mutation_kind: entry.mutation_kind.clone(),
             risk: entry.risk,
             score: entry.score,
+            useful_change: entry.useful_change,
+            non_candidate_reason: entry.non_candidate_reason.clone(),
+            duplicate_rejected: entry.duplicate_rejected,
+            regression_penalty: entry.regression_penalty,
+            success_bonus: entry.success_bonus,
             cargo_check_ok: entry.cargo_check_ok,
             cargo_test_ok: entry.cargo_test_ok,
             cargo_run_ok: entry.cargo_run_ok,
@@ -309,4 +346,8 @@ impl From<&EvolutionLogEntry> for CandidateSummary {
             timestamp_unix: entry.timestamp_unix,
         }
     }
+}
+
+pub fn mutation_kind_label(kind: MutationKind) -> String {
+    format!("{kind:?}").to_ascii_lowercase()
 }

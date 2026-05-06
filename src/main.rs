@@ -1,6 +1,8 @@
 use eva_runtime_with_task_validator::{
-    build_project_phase_runtime_output, ingest_repo_patterns, list_candidates, load_metrics,
-    promote_candidate, render_plans, replay_candidate, run_evolution_cycle,
+    autonomy_status, build_project_phase_runtime_output, candidate_diff, ingest_repo_patterns,
+    learning_summary, list_candidates, load_metrics, print_benchmark, print_last_report,
+    print_report, promote_candidate, refresh_metrics, refresh_report, render_plans,
+    replay_candidate, review_candidate, run_benchmark, run_evolution_cycle, run_planned_cycles,
     run_planned_evolution_cycle, run_repo_patch_report, serve_runtime_daemon,
     should_run_repo_patch_mode, CycleInput, RepoPatchCliConfig, RuntimeCliCommand,
     RuntimeCycleRunner, RUNTIME_CLI_HELP,
@@ -60,6 +62,44 @@ fn main() {
             println!("planned_evolution_status: ok");
             return;
         }
+        Ok(RuntimeCliCommand::EvolvePlannedN(count)) => {
+            match run_planned_cycles(".", "memory", count) {
+                Ok(run_ids) => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&run_ids).expect("serialize run ids")
+                    )
+                }
+                Err(err) => {
+                    eprintln!("planned_evolution_n_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::EvolutionBenchmark(count)) => {
+            match run_benchmark(".", "memory", count) {
+                Ok(benchmark) => println!("{}", print_benchmark(&benchmark)),
+                Err(err) => {
+                    eprintln!("evolution_benchmark_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::AutonomyStatus) => {
+            match autonomy_status(".", "memory") {
+                Ok(status) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&status).expect("serialize autonomy status")
+                ),
+                Err(err) => {
+                    eprintln!("autonomy_status_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
         Ok(RuntimeCliCommand::Metrics) => {
             match load_metrics("memory") {
                 Ok(metrics) => println!(
@@ -68,6 +108,85 @@ fn main() {
                 ),
                 Err(err) => {
                     eprintln!("metrics_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::MetricsRefresh) => {
+            match refresh_metrics("memory") {
+                Ok(metrics) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&metrics).expect("serialize metrics")
+                ),
+                Err(err) => {
+                    eprintln!("metrics_refresh_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::LearningSummary) => {
+            match learning_summary("memory") {
+                Ok(summary) => println!("{summary}"),
+                Err(err) => {
+                    eprintln!("learning_summary_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::LastReport) => {
+            match print_last_report("memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("last_report_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::Report(run_id)) => {
+            match print_report("memory", &run_id) {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("report_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ReportRefresh(run_id)) => {
+            match refresh_report("memory", &run_id) {
+                Ok(report) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report).expect("serialize refreshed report")
+                ),
+                Err(err) => {
+                    eprintln!("report_refresh_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ReviewCandidate(run_id)) => {
+            match review_candidate(".", "memory", &run_id) {
+                Ok(review) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&review).expect("serialize candidate review")
+                ),
+                Err(err) => {
+                    eprintln!("review_candidate_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::CandidateDiff(run_id)) => {
+            match candidate_diff("memory", &run_id) {
+                Ok(diff) => println!("{diff}"),
+                Err(err) => {
+                    eprintln!("candidate_diff_error: {err}");
                     std::process::exit(1);
                 }
             }

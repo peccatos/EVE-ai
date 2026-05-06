@@ -46,14 +46,20 @@ fn scorer_requires_check_and_test_for_acceptance() {
     let pass = command(true, 10);
     let fail = command(false, 5);
 
-    let accepted = score_cycle(&pass, &pass, Some(&pass));
+    let accepted = score_cycle(MutationKind::AppendComment, &pass, &pass, Some(&pass));
     assert_eq!(accepted.accepted, true);
-    assert_eq!(accepted.score, 10.0);
+    assert_eq!(accepted.score, 2.0);
+    assert_eq!(accepted.useful_change, false);
+    assert_eq!(
+        accepted.non_candidate_reason.as_deref(),
+        Some("cosmetic_mutation")
+    );
 
-    let rejected = score_cycle(&pass, &fail, None);
+    let rejected = score_cycle(MutationKind::ReplaceText, &pass, &fail, None);
     assert_eq!(rejected.accepted, false);
     assert_eq!(rejected.run_passed, false);
-    assert!(rejected.score < accepted.score);
+    assert_eq!(rejected.score, 3.0);
+    assert_eq!(rejected.useful_change, false);
 }
 
 fn command(success: bool, duration_ms: u128) -> CommandResult {

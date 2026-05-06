@@ -1,9 +1,16 @@
 use std::process::Command;
 
 use crate::contracts::SandboxResult;
-use crate::evolution::{memory, mutator, scorer};
+use crate::evolution::{dedup, memory, mutator, refresh_report, scorer};
 use crate::promotion::gate::check_promotion_gate;
+use crate::promotion::review::review_candidate;
 use crate::sandbox::{manager, runner, snapshot};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PromotionBackupKind {
+    ExistingFile { original_contents: String },
+    NewFile,
+}
 
 pub fn list_candidates(memory_root: &str) -> Result<String, String> {
     let summaries = memory::list_candidate_summaries(memory_root)?;
@@ -13,9 +20,33 @@ pub fn list_candidates(memory_root: &str) -> Result<String, String> {
     Ok(summaries
         .iter()
         .map(|summary| {
+            let report_path = std::path::Path::new(memory_root)
+                .join("reports")
+                .join(format!("{}.ru.md", summary.run_id));
+            let review = review_candidate(".", memory_root, &summary.run_id).ok();
+            let replay_status = review
+                .as_ref()
+                .map(|review| review.replay_status.as_str())
+                .unwrap_or("not_run");
+            let promotion_ready = review
+                .as_ref()
+                .map(|review| review.promotion_allowed)
+                .unwrap_or(false);
             format!(
-                "{} score={:.1} risk={:.2} target={}",
-                summary.run_id, summary.score, summary.risk, summary.target_file
+                "{} score={:.1} risk={:.2} kind={} useful={} replay_status={} promotion_ready={} target={} report={}",
+                summary.run_id,
+                summary.score,
+                summary.risk,
+                summary.mutation_kind,
+                summary.useful_change,
+                replay_status,
+                promotion_ready,
+                summary.target_file,
+                if report_path.exists() {
+                    report_path.display().to_string()
+                } else {
+                    "(none)".to_string()
+                }
             )
         })
         .collect::<Vec<_>>()
@@ -37,12 +68,20 @@ pub fn replay_candidate(project_root: &str, memory_root: &str, run_id: &str) -> 
         .test
         .as_ref()
         .ok_or_else(|| "replay did not run cargo test".to_string())?;
-    let score = scorer::score_cycle(&sandbox.check, test_ref, sandbox.run.as_ref());
+    let score = scorer::score_cycle(
+        mutation.kind,
+        &sandbox.check,
+        test_ref,
+        sandbox.run.as_ref(),
+    );
     let stdout = memory::combined_stdout(&sandbox);
     let stderr = memory::combined_stderr(&sandbox);
     let replay = memory::ReplayResult {
         run_id: run_id.to_string(),
-        replay_status: if score.score >= memory::CANDIDATE_THRESHOLD && score.accepted {
+        replay_status: if score.score >= memory::CANDIDATE_THRESHOLD
+            && score.accepted
+            && score.useful_change
+        {
             crate::contracts::EvolutionStatus::Candidate
         } else if score.accepted {
             crate::contracts::EvolutionStatus::Passed
@@ -64,7 +103,9 @@ pub fn replay_candidate(project_root: &str, memory_root: &str, run_id: &str) -> 
         timestamp_unix: memory::now_unix(),
     };
     crate::evolution::metrics::update_metrics_after_replay(memory_root, &replay)?;
-    memory::store_replay_result(memory_root, run_id, &replay)
+    memory::store_replay_result(memory_root, run_id, &replay)?;
+    refresh_report(memory_root, run_id)?;
+    Ok(())
 }
 
 pub fn promote_candidate(
@@ -80,15 +121,14 @@ pub fn promote_candidate(
     }
 
     let target_path = std::path::Path::new(project_root).join(&mutation.target_file);
-    let original = std::fs::read_to_string(&target_path)
-        .map_err(|error| format!("failed to backup promotion target: {error}"))?;
+    let backup_kind = prepare_promotion_backup(&target_path)?;
 
     mutator::apply_mutation(project_root, &mutation)?;
     let validation = validate_promoted_project(project_root);
     let (check, test) = match validation {
         Ok(result) => result,
         Err(error) => {
-            std::fs::write(&target_path, original)
+            rollback_promoted_target(&target_path, &backup_kind)
                 .map_err(|restore_error| format!("{error}; restore failed: {restore_error}"))?;
             return Err(error);
         }
@@ -103,13 +143,14 @@ pub fn promote_candidate(
         .test
         .as_ref()
         .ok_or_else(|| "promotion did not run cargo test".to_string())?;
-    let score = scorer::score_cycle(&sandbox.check, test_ref, None);
+    let score = scorer::score_cycle(mutation.kind, &sandbox.check, test_ref, None);
     if !score.accepted {
         return Err("promotion validation failed".to_string());
     }
     let entry = memory::build_log_entry(
         memory::new_run_id(),
         &mutation,
+        dedup::compute_mutation_digest(&mutation),
         &score,
         &sandbox,
         true,
@@ -121,6 +162,40 @@ pub fn promote_candidate(
     )?;
     crate::evolution::metrics::update_metrics_after_log(memory_root, &entry)?;
     Ok(())
+}
+
+fn prepare_promotion_backup(target_path: &std::path::Path) -> Result<PromotionBackupKind, String> {
+    if target_path.exists() {
+        let original_contents = std::fs::read_to_string(target_path)
+            .map_err(|error| format!("failed to backup promotion target: {error}"))?;
+        return Ok(PromotionBackupKind::ExistingFile { original_contents });
+    }
+
+    if let Some(parent) = target_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create promotion target parent: {error}"))?;
+    }
+
+    Ok(PromotionBackupKind::NewFile)
+}
+
+fn rollback_promoted_target(
+    target_path: &std::path::Path,
+    backup_kind: &PromotionBackupKind,
+) -> Result<(), String> {
+    match backup_kind {
+        PromotionBackupKind::ExistingFile { original_contents } => {
+            std::fs::write(target_path, original_contents)
+                .map_err(|error| format!("failed to restore promotion target: {error}"))
+        }
+        PromotionBackupKind::NewFile => {
+            if target_path.exists() {
+                std::fs::remove_file(target_path)
+                    .map_err(|error| format!("failed to remove promoted file: {error}"))?;
+            }
+            Ok(())
+        }
+    }
 }
 
 fn validate_promoted_project(

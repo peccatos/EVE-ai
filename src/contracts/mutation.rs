@@ -8,6 +8,10 @@ pub enum MutationKind {
     ParameterTune,
     AddTestSkeleton,
     AddMetricField,
+    AddUnitTest,
+    AddReplayAssertion,
+    AddLearningSummaryField,
+    AddMetricUpdate,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
