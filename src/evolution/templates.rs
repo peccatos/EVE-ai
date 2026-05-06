@@ -12,9 +12,10 @@ pub fn generate_add_unit_test(plan: &MutationPlan) -> MutationContract {
         search: None,
         replace: None,
         append: Some(format!(
-            "#[test]\nfn {}() {{\n    let digest = \"{}\";\n    assert_eq!(digest.len(), 64);\n    assert!(digest.chars().all(|ch| ch.is_ascii_hexdigit()));\n}}\n",
+            "#[test]\nfn {}() {{\n    let digest = \"{}\";\n    let bytes = digest.as_bytes();\n    assert_eq!(digest.len(), 64);\n    assert!(digest.chars().all(|ch| ch.is_ascii_hexdigit()));\n    assert_eq!(bytes.first().copied(), Some(b'{}'));\n}}\n",
             normalized_generated_test_name(plan, "deterministic"),
-            fixed_hex(plan)
+            fixed_hex(plan),
+            fixed_hex(plan).chars().next().unwrap_or('0')
         )),
         reason: format!("add deterministic generated unit test for {}", plan.id),
         expected_gain: plan.expected_gain.clamp(0.0, 1.0),
@@ -30,7 +31,7 @@ pub fn generate_add_replay_assertion(plan: &MutationPlan) -> MutationContract {
         search: None,
         replace: None,
         append: Some(format!(
-            "#[test]\nfn {}() {{\n    let fixture = [(\"candidate\", true), (\"replay\", true), (\"failed\", false)];\n    let passed = fixture.iter().filter(|(_, ok)| *ok).count();\n    assert_eq!(passed, 2);\n    assert!(fixture.iter().any(|(name, _)| *name == \"replay\"));\n}}\n",
+            "#[test]\nfn {}() {{\n    let fixture = [(\"candidate\", true), (\"replay\", true), (\"failed\", false)];\n    let passed = fixture.iter().filter(|(_, ok)| *ok).count();\n    let replay_ok = fixture.iter().find(|(name, _)| *name == \"replay\").map(|(_, ok)| *ok);\n    assert_eq!(passed, 2);\n    assert_eq!(replay_ok, Some(true));\n    assert!(fixture.iter().any(|(name, _)| *name == \"candidate\"));\n}}\n",
             normalized_generated_test_name(plan, "replay")
         )),
         reason: format!("add deterministic replay assertion for {}", plan.id),
@@ -45,10 +46,10 @@ pub fn generate_add_learning_summary_field(plan: &MutationPlan) -> MutationContr
         kind: MutationKind::AddLearningSummaryField,
         target_file: "src/evolution/metrics.rs".to_string(),
         search: Some(
-            "total regression patterns: {}\\ntotal success patterns: {}\\nmutation dedup count: {}\\ntop risky files: {}\\ntop successful files: {}\",\n        regressions.len(),\n        successes.len(),\n        dedup_entries.len(),\n        risky,\n        successful".to_string(),
+            "total regression patterns: {}\\ntotal success patterns: {}\\nmutation dedup count: {}\\ntop risky files: {}\\ntop successful files: {}\\nlearning source count: {}\",\n        regressions.len(),\n        successes.len(),\n        dedup_entries.len(),\n        risky,\n        successful,\n        regressions.len() + successes.len()".to_string(),
         ),
         replace: Some(
-            "total regression patterns: {}\\ntotal success patterns: {}\\nmutation dedup count: {}\\ntop risky files: {}\\ntop successful files: {}\\nlearning source count: {}\",\n        regressions.len(),\n        successes.len(),\n        dedup_entries.len(),\n        risky,\n        successful,\n        regressions.len() + successes.len()".to_string(),
+            "total regression patterns: {}\\ntotal success patterns: {}\\nmutation dedup count: {}\\ntop risky files: {}\\ntop successful files: {}\\nlearning source count: {}\\nreplay artifact count: {}\",\n        regressions.len(),\n        successes.len(),\n        dedup_entries.len(),\n        risky,\n        successful,\n        regressions.len() + successes.len(),\n        dedup_entries.len()".to_string(),
         ),
         append: None,
         reason: format!("extend learning summary output for {}", plan.id),
@@ -66,7 +67,7 @@ pub fn generate_add_metric_update(plan: &MutationPlan) -> MutationContract {
             "pub const DEFAULT_METRICS_PATH: &str = \"memory/metrics.json\";\n".to_string(),
         ),
         replace: Some(
-            "pub const DEFAULT_METRICS_PATH: &str = \"memory/metrics.json\";\npub const EVA_REPORTS_DIR: &str = \"memory/reports\";\n".to_string(),
+            "pub const DEFAULT_METRICS_PATH: &str = \"memory/metrics.json\";\npub const EVA_REPORTS_DIR: &str = \"memory/reports\";\npub const EVA_CANDIDATE_DIR: &str = \"memory/candidates\";\n".to_string(),
         ),
         append: None,
         reason: format!("add compact metric/report constant for {}", plan.id),
@@ -76,8 +77,15 @@ pub fn generate_add_metric_update(plan: &MutationPlan) -> MutationContract {
 }
 
 pub fn normalized_generated_test_name(plan: &MutationPlan, flavor: &str) -> String {
-    let semantic = semantic_fragment(&plan.id);
-    let digest = stable_short_digest(plan, flavor);
+    normalized_generated_test_name_for_seed(
+        &format!("{}:{}:{:?}", plan.id, plan.target_file, plan.mutation_kind),
+        flavor,
+    )
+}
+
+pub fn normalized_generated_test_name_for_seed(seed: &str, flavor: &str) -> String {
+    let semantic = semantic_fragment(seed);
+    let digest = stable_short_digest(seed, flavor);
     let flavor = normalize_identifier_fragment(flavor, 16);
     let fixed_prefix = "eva_generated__";
     let fixed_separators = "__";
@@ -129,14 +137,11 @@ fn normalize_identifier_fragment(value: &str, max_len: usize) -> String {
     normalized.trim_matches('_').to_string()
 }
 
-fn stable_short_digest(plan: &MutationPlan, flavor: &str) -> String {
-    sha256_digest(&format!(
-        "{}:{}:{:?}:{}",
-        plan.id, plan.target_file, plan.mutation_kind, flavor
-    ))
-    .chars()
-    .take(6)
-    .collect()
+fn stable_short_digest(seed: &str, flavor: &str) -> String {
+    sha256_digest(&format!("{seed}:{flavor}"))
+        .chars()
+        .take(6)
+        .collect()
 }
 
 fn fixed_hex(plan: &MutationPlan) -> String {
