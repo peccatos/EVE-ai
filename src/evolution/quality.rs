@@ -1,15 +1,21 @@
 use serde::{Deserialize, Serialize};
 
 use crate::contracts::EvolutionLogEntry;
-use crate::evolution::{load_portfolio, load_regressions, load_strategy_portfolio};
+use crate::evolution::{
+    classify_mutation_kind_label, load_portfolio, load_regressions, load_strategy_portfolio,
+    MutationClass,
+};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct QualityMetricsV2 {
+    pub class_weight: f32,
     pub novelty_score: f32,
     pub useful_delta_score: f32,
     pub duplicate_suppression_score: f32,
     pub regression_avoidance_score: f32,
     pub coverage_proxy_score: f32,
+    pub cosmetic_penalty: f32,
+    pub legacy_penalty: f32,
     pub quality_score: f32,
 }
 
@@ -24,6 +30,7 @@ pub fn compute_quality_for_hypothesis(
     let portfolio = load_portfolio(memory_root)?;
     let strategy_portfolio = load_strategy_portfolio(memory_root).unwrap_or_default();
     let regressions = load_regressions(memory_root)?;
+    let class = classify_mutation_kind_label(mutation_kind, true);
     let mutation_seen = portfolio
         .kinds
         .iter()
@@ -72,18 +79,40 @@ pub fn compute_quality_for_hypothesis(
     } else {
         0.12
     };
-    let quality_score = (novelty_score
+    let class_weight = match class {
+        MutationClass::Useful => 0.20,
+        MutationClass::Cosmetic => 0.0,
+        MutationClass::Unsafe => -0.40,
+        MutationClass::Legacy => -0.05,
+    };
+    let cosmetic_penalty = if class == MutationClass::Cosmetic {
+        0.25
+    } else {
+        0.0
+    };
+    let legacy_penalty = if class == MutationClass::Legacy {
+        0.10
+    } else {
+        0.0
+    };
+    let quality_score = ((class_weight
+        + novelty_score
         + useful_delta_score
         + duplicate_suppression_score
         + regression_avoidance_score
         + coverage_proxy_score)
-        .clamp(0.0, 2.0);
+        - cosmetic_penalty
+        - legacy_penalty)
+        .clamp(0.0_f32, 2.0_f32);
     Ok(QualityMetricsV2 {
+        class_weight,
         novelty_score,
         useful_delta_score,
         duplicate_suppression_score,
         regression_avoidance_score,
         coverage_proxy_score,
+        cosmetic_penalty,
+        legacy_penalty,
         quality_score,
     })
 }

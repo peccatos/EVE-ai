@@ -4,7 +4,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::contracts::EvolutionLogEntry;
-use crate::evolution::{memory, ReplayResult};
+use crate::evolution::{classify_mutation_kind_label, memory, MutationClass, ReplayResult};
 
 pub const DEFAULT_STRATEGY_PORTFOLIO_PATH: &str = "memory/strategy_portfolio.json";
 
@@ -19,6 +19,12 @@ pub struct StrategyPortfolioEntry {
     pub strategy: String,
     pub seen_count: u64,
     pub useful_count: u64,
+    #[serde(default)]
+    pub cosmetic_count: u64,
+    #[serde(default)]
+    pub unsafe_count: u64,
+    #[serde(default)]
+    pub legacy_count: u64,
     pub replay_passed_count: u64,
     pub promoted_count: u64,
     pub average_score: f32,
@@ -33,6 +39,9 @@ impl Default for StrategyPortfolioEntry {
             strategy: String::new(),
             seen_count: 0,
             useful_count: 0,
+            cosmetic_count: 0,
+            unsafe_count: 0,
+            legacy_count: 0,
             replay_passed_count: 0,
             promoted_count: 0,
             average_score: 0.0,
@@ -64,10 +73,13 @@ pub fn print_strategy_portfolio(memory_root: &str) -> Result<String, String> {
         .iter()
         .map(|entry| {
             format!(
-                "{} seen={} useful={} replay_passed={} promoted={} avg_score={:.2} avg_risk={:.2} saturation={:.2} last_used_at={}",
+                "{} seen={} useful={} cosmetic={} unsafe={} legacy={} replay_passed={} promoted={} avg_score={:.2} avg_risk={:.2} saturation={:.2} last_used_at={}",
                 entry.strategy,
                 entry.seen_count,
                 entry.useful_count,
+                entry.cosmetic_count,
+                entry.unsafe_count,
+                entry.legacy_count,
                 entry.replay_passed_count,
                 entry.promoted_count,
                 entry.average_score,
@@ -102,10 +114,13 @@ pub fn refresh_strategy_portfolio(memory_root: &str) -> Result<StrategyPortfolio
         let slot = upsert_strategy(&mut portfolio, &strategy);
         let previous_seen = slot.seen_count;
         slot.seen_count += 1;
-        if entry.useful_change {
-            slot.useful_count += 1;
+        match classify_mutation_kind_label(&entry.mutation_kind, entry.useful_change) {
+            MutationClass::Useful => slot.useful_count += 1,
+            MutationClass::Cosmetic => slot.cosmetic_count += 1,
+            MutationClass::Unsafe => slot.unsafe_count += 1,
+            MutationClass::Legacy => slot.legacy_count += 1,
         }
-        if entry.retained_in_core {
+        if entry.retained_in_core && entry.useful_change {
             slot.promoted_count += 1;
         }
         slot.average_score = if previous_seen == 0 {
@@ -145,6 +160,8 @@ pub fn refresh_strategy_portfolio(memory_root: &str) -> Result<StrategyPortfolio
                     .and_then(|name| name.to_str())
                     .unwrap_or_default();
                 if let Ok(mutation) = memory::load_candidate(memory_root, run_id) {
+                    let class =
+                        classify_mutation_kind_label(&mutation_kind_label(mutation.kind), true);
                     let strategy = infer_strategy(
                         None,
                         None,
@@ -153,7 +170,9 @@ pub fn refresh_strategy_portfolio(memory_root: &str) -> Result<StrategyPortfolio
                         &[],
                     );
                     let slot = upsert_strategy(&mut portfolio, &strategy);
-                    slot.replay_passed_count += 1;
+                    if class == MutationClass::Useful {
+                        slot.replay_passed_count += 1;
+                    }
                     slot.last_used_at = slot.last_used_at.max(replay.timestamp_unix);
                 }
             }

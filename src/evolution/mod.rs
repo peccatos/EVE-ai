@@ -1,9 +1,11 @@
 pub mod autonomy;
 pub mod benchmark;
 pub mod campaign;
+pub mod classification;
 pub mod dedup;
 pub mod evolution_policy;
 pub mod generator;
+pub mod hygiene;
 pub mod hypothesis;
 pub mod learning_context;
 pub mod memory;
@@ -31,6 +33,9 @@ pub use campaign::{
     print_campaign, print_last_campaign_report, run_stored_campaign, run_task_from_path,
     EvolutionCampaign,
 };
+pub use classification::{
+    classify_mutation_kind, classify_mutation_kind_label, mutation_class_label, MutationClass,
+};
 pub use dedup::{
     compute_mutation_digest, load_dedup_entries, record_dedup_entry, should_reject_duplicate_bad,
     DedupEntry,
@@ -41,6 +46,10 @@ pub use evolution_policy::{
 };
 pub use generator::{
     generate_from_plan, generate_from_recombined_hypothesis, generate_safe_mutation,
+};
+pub use hygiene::{
+    fix_generated_test_names, print_hygiene_plan, print_hygiene_report, run_evolution_hygiene,
+    HygieneReport,
 };
 pub use hypothesis::{rank_plans, EvolutionHypothesis};
 pub use learning_context::LearningContext;

@@ -10,7 +10,7 @@ use crate::contracts::{
 };
 use crate::evolution::{
     compute_quality_for_hypothesis, ensure_portfolio, ensure_strategy_portfolio, generator,
-    load_or_refresh_evolution_policy, memory, CandidateSummary, EvolutionMetrics,
+    load_or_refresh_evolution_policy, memory, CandidateSummary, EvolutionMetrics, MutationClass,
     MutationPortfolio, MutationPortfolioEntry, RegressionEntry, SuccessPatternEntry,
 };
 use crate::graph::{load_graph, EvolutionGraph};
@@ -626,6 +626,22 @@ fn build_hypothesis(
         - policy_risk_penalty)
         .clamp(-1.0, 3.0);
 
+    let contamination_note = portfolio_entry(portfolio, &option.mutation_kind).and_then(|entry| {
+        if entry.cosmetic_count > 0
+            || entry.unsafe_count > 0
+            || entry.mutation_class == MutationClass::Legacy
+        {
+            Some(format!(
+                " contamination_detected cosmetic={} unsafe={} class={}",
+                entry.cosmetic_count,
+                entry.unsafe_count,
+                crate::evolution::mutation_class_label(entry.mutation_class)
+            ))
+        } else {
+            None
+        }
+    });
+
     Ok(RecombinedHypothesis {
         hypothesis_id: format!(
             "recombined:{}:{}:{}",
@@ -639,11 +655,15 @@ fn build_hypothesis(
         suggested_mutation_kind: option.mutation_kind.clone(),
         suggested_target: option.target.clone(),
         reason_ru: option.reason_ru.clone(),
-        portfolio_reason_ru: portfolio_reason_ru(
-            &option.mutation_kind,
-            diversity_bonus,
-            saturation_penalty,
-            repeated_target_penalty,
+        portfolio_reason_ru: format!(
+            "{}{}",
+            portfolio_reason_ru(
+                &option.mutation_kind,
+                diversity_bonus,
+                saturation_penalty,
+                repeated_target_penalty,
+            ),
+            contamination_note.unwrap_or_default()
         ),
         selected_strategy,
         policy_reason_ru: policy.policy_reason_ru.clone(),
@@ -692,6 +712,9 @@ fn preferred_objective_for_file(
 
 fn diversity_bonus(kind: &str, portfolio: &MutationPortfolio) -> f32 {
     let entry = portfolio_entry(portfolio, kind);
+    if entry.is_some_and(|entry| entry.mutation_class != MutationClass::Useful) {
+        return 0.0;
+    }
     let seen_count = entry.map(|entry| entry.seen_count).unwrap_or(0);
     match kind {
         "addreplayassertion" | "addmetricupdate" | "addlearningsummaryfield" => match seen_count {

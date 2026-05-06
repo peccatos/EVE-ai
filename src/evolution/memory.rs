@@ -136,6 +136,11 @@ pub fn build_log_entry_with_plan(
         portfolio_reason_ru: None,
         selected_strategy: None,
         policy_reason_ru: None,
+        mutation_class: crate::evolution::mutation_class_label(
+            crate::evolution::classify_mutation_kind(mutation.kind, score.useful_change),
+        )
+        .to_string(),
+        hygiene_warning_ru: None,
         diversity_bonus: 0.0,
         saturation_penalty: 0.0,
         repeated_target_penalty: 0.0,

@@ -1,14 +1,15 @@
 use eva_runtime_with_task_validator::{
     autonomy_status, build_project_phase_runtime_output, candidate_diff, distill_patterns,
-    ingest_repo_patterns, learning_summary, list_candidates, load_metrics, print_benchmark,
-    print_campaign, print_evolution_policy, print_last_campaign_report, print_last_report,
-    print_portfolio, print_quality_report, print_report, print_strategy_portfolio,
-    promote_candidate, refresh_metrics, refresh_portfolio, refresh_report,
-    refresh_strategy_portfolio, render_plans, render_recombined_hypotheses, replay_candidate,
-    review_candidate, run_benchmark, run_evolution_cycle, run_planned_cycles,
-    run_planned_evolution_cycle, run_recombined_evolution_cycle, run_repo_patch_report,
-    run_stored_campaign, run_task_from_path, serve_runtime_daemon, should_run_repo_patch_mode,
-    CycleInput, RepoPatchCliConfig, RuntimeCliCommand, RuntimeCycleRunner, RUNTIME_CLI_HELP,
+    fix_generated_test_names, ingest_repo_patterns, learning_summary, list_candidates,
+    load_metrics, print_benchmark, print_campaign, print_evolution_policy, print_hygiene_plan,
+    print_hygiene_report, print_last_campaign_report, print_last_report, print_portfolio,
+    print_quality_report, print_report, print_strategy_portfolio, promote_candidate,
+    refresh_metrics, refresh_portfolio, refresh_report, refresh_strategy_portfolio, render_plans,
+    render_recombined_hypotheses, replay_candidate, review_candidate, run_benchmark,
+    run_evolution_cycle, run_planned_cycles, run_planned_evolution_cycle,
+    run_recombined_evolution_cycle, run_repo_patch_report, run_stored_campaign, run_task_from_path,
+    serve_runtime_daemon, should_run_repo_patch_mode, CycleInput, RepoPatchCliConfig,
+    RuntimeCliCommand, RuntimeCycleRunner, RUNTIME_CLI_HELP,
 };
 use serde::Deserialize;
 use std::fs;
@@ -190,6 +191,36 @@ fn main() {
                 Ok(report) => println!("{report}"),
                 Err(err) => {
                     eprintln!("quality_report_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::EvolutionHygiene) => {
+            match print_hygiene_report(".", "memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("evolution_hygiene_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::HygienePlan) => {
+            match print_hygiene_plan(".", "memory") {
+                Ok(plan) => println!("{plan}"),
+                Err(err) => {
+                    eprintln!("hygiene_plan_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::HygieneFixGeneratedTests) => {
+            match fix_generated_test_names(".") {
+                Ok(status) => println!("{status}"),
+                Err(err) => {
+                    eprintln!("hygiene_fix_generated_tests_error: {err}");
                     std::process::exit(1);
                 }
             }

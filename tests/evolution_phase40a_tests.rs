@@ -25,6 +25,8 @@ fn useful_entry(run_id: &str) -> EvolutionLogEntry {
         portfolio_reason_ru: None,
         selected_strategy: None,
         policy_reason_ru: None,
+        mutation_class: "legacy".to_string(),
+        hygiene_warning_ru: None,
         diversity_bonus: 0.0,
         saturation_penalty: 0.0,
         repeated_target_penalty: 0.0,

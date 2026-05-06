@@ -65,6 +65,15 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
   cargo run -- --quality-report <RUN_ID>
       Print quality metrics v2 for a stored run.
 
+  cargo run -- --evolution-hygiene
+      Print latest evolution hygiene report and persist it under memory/hygiene/.
+
+  cargo run -- --hygiene-plan
+      Print recommended safe cleanup actions from hygiene analysis.
+
+  cargo run -- --hygiene-fix-generated-tests
+      Rename only long eva_generated_* tests in tests/evolution_generated_tests.rs with rollback on validation failure.
+
   cargo run -- --learning-summary
       Print compact learning memory summary.
 
@@ -147,6 +156,9 @@ pub enum RuntimeCliCommand {
     StrategyPortfolioRefresh,
     EvolutionPolicy,
     QualityReport(String),
+    EvolutionHygiene,
+    HygienePlan,
+    HygieneFixGeneratedTests,
     LearningSummary,
     LastReport,
     Report(String),
@@ -288,6 +300,15 @@ impl RuntimeCliCommand {
         }
         if raw_args == ["--evolution-policy"] {
             return Ok(Self::EvolutionPolicy);
+        }
+        if raw_args == ["--evolution-hygiene"] {
+            return Ok(Self::EvolutionHygiene);
+        }
+        if raw_args == ["--hygiene-plan"] {
+            return Ok(Self::HygienePlan);
+        }
+        if raw_args == ["--hygiene-fix-generated-tests"] {
+            return Ok(Self::HygieneFixGeneratedTests);
         }
         if raw_args == ["--learning-summary"] {
             return Ok(Self::LearningSummary);

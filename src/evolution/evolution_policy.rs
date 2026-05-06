@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::contracts::TaskContract;
 use crate::evolution::{
     autonomy_status, ensure_strategy_portfolio, load_metrics, load_portfolio, load_regressions,
-    load_success_patterns,
+    load_success_patterns, MutationClass,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -73,7 +73,10 @@ fn build_policy(
         .kinds
         .iter()
         .find(|entry| entry.mutation_kind == "addunittest")
-        .map(|entry| entry.saturation_score > 0.0 || entry.candidate_count > 0)
+        .map(|entry| {
+            entry.mutation_class == MutationClass::Useful
+                && (entry.saturation_score > 0.0 || entry.candidate_count > 0)
+        })
         .unwrap_or(false);
     let runtime_regressions = regressions
         .iter()
@@ -89,6 +92,16 @@ fn build_policy(
                 || entry.mutation_kind == "addlearningsummaryfield"
         })
         .count();
+    let ignored_historical_records = mutation_portfolio
+        .kinds
+        .iter()
+        .map(|entry| entry.cosmetic_count + entry.unsafe_count)
+        .sum::<u64>()
+        + strategy_portfolio
+            .strategies
+            .iter()
+            .map(|entry| entry.cosmetic_count + entry.legacy_count + entry.unsafe_count)
+            .sum::<u64>();
 
     let mut strategy_scores = vec![
         ("TestExpansion", 0.2_f32),
@@ -106,7 +119,7 @@ fn build_policy(
             .find(|entry| entry.strategy == *strategy)
         {
             *score -= entry.saturation_score;
-            if entry.seen_count == 0 {
+            if entry.useful_count == 0 && entry.promoted_count == 0 {
                 *score += 0.25;
             }
         } else {
@@ -178,13 +191,14 @@ fn build_policy(
     Ok(EvolutionPolicy {
         selected_strategy: selected_strategy.clone(),
         policy_reason_ru: format!(
-            "Политика выбрала стратегию {}: saturation addunittest={}, runtime_regressions={}, metrics_success={}, autonomy_level={}, risk_limit={:.2}.",
+            "Политика выбрала стратегию {}: saturation addunittest={}, runtime_regressions={}, metrics_success={}, autonomy_level={}, risk_limit={:.2}, cosmetic_legacy_ignored={}.",
             selected_strategy,
             addunittest_saturated,
             runtime_regressions,
             metrics_success,
             autonomy.current_safe_autonomy_level,
-            risk_limit
+            risk_limit,
+            ignored_historical_records
         ),
         allowed_mutation_kinds,
         preferred_targets,

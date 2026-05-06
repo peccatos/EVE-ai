@@ -35,6 +35,10 @@ pub struct EvolutionLogEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_reason_ru: Option<String>,
     #[serde(default)]
+    pub mutation_class: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hygiene_warning_ru: Option<String>,
+    #[serde(default)]
     pub diversity_bonus: f32,
     #[serde(default)]
     pub saturation_penalty: f32,

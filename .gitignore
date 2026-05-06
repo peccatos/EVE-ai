@@ -31,3 +31,8 @@ memory/portfolio.json
 
 # keep optional memory root placeholder
 !memory/.gitkeep
+
+# EVA generated policy/strategy state
+memory/evolution_policy.json
+memory/strategy_portfolio.json
+memory/hygiene/

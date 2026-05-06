@@ -23,6 +23,7 @@ struct PlanContext {
     portfolio_reason_ru: Option<String>,
     selected_strategy: Option<String>,
     policy_reason_ru: Option<String>,
+    hygiene_warning_ru: Option<String>,
     diversity_bonus: f32,
     saturation_penalty: f32,
     repeated_target_penalty: f32,
@@ -103,6 +104,7 @@ pub fn run_planned_evolution_cycle_for_task(
             portfolio_reason_ru: None,
             selected_strategy: None,
             policy_reason_ru: None,
+            hygiene_warning_ru: None,
             diversity_bonus: 0.0,
             saturation_penalty: 0.0,
             repeated_target_penalty: 0.0,
@@ -394,6 +396,7 @@ fn with_recombination_context(
         entry.portfolio_reason_ru = context.portfolio_reason_ru.clone();
         entry.selected_strategy = context.selected_strategy.clone();
         entry.policy_reason_ru = context.policy_reason_ru.clone();
+        entry.hygiene_warning_ru = context.hygiene_warning_ru.clone();
         entry.diversity_bonus = context.diversity_bonus;
         entry.saturation_penalty = context.saturation_penalty;
         entry.repeated_target_penalty = context.repeated_target_penalty;
@@ -435,6 +438,13 @@ fn recombined_plan_context(hypothesis: &RecombinedHypothesis) -> PlanContext {
         portfolio_reason_ru: Some(hypothesis.portfolio_reason_ru.clone()),
         selected_strategy: Some(hypothesis.selected_strategy.clone()),
         policy_reason_ru: Some(hypothesis.policy_reason_ru.clone()),
+        hygiene_warning_ru: hypothesis
+            .portfolio_reason_ru
+            .contains("contamination_detected")
+            .then(|| {
+                "Исторический portfolio для этого kind содержит cosmetic/legacy contamination."
+                    .to_string()
+            }),
         diversity_bonus: hypothesis.diversity_bonus,
         saturation_penalty: hypothesis.saturation_penalty,
         repeated_target_penalty: hypothesis.repeated_target_penalty,

@@ -77,8 +77,15 @@ pub fn generate_add_metric_update(plan: &MutationPlan) -> MutationContract {
 }
 
 pub fn normalized_generated_test_name(plan: &MutationPlan, flavor: &str) -> String {
-    let semantic = semantic_fragment(&plan.id);
-    let digest = stable_short_digest(plan, flavor);
+    normalized_generated_test_name_for_seed(
+        &format!("{}:{}:{:?}", plan.id, plan.target_file, plan.mutation_kind),
+        flavor,
+    )
+}
+
+pub fn normalized_generated_test_name_for_seed(seed: &str, flavor: &str) -> String {
+    let semantic = semantic_fragment(seed);
+    let digest = stable_short_digest(seed, flavor);
     let flavor = normalize_identifier_fragment(flavor, 16);
     let fixed_prefix = "eva_generated__";
     let fixed_separators = "__";
@@ -130,14 +137,11 @@ fn normalize_identifier_fragment(value: &str, max_len: usize) -> String {
     normalized.trim_matches('_').to_string()
 }
 
-fn stable_short_digest(plan: &MutationPlan, flavor: &str) -> String {
-    sha256_digest(&format!(
-        "{}:{}:{:?}:{}",
-        plan.id, plan.target_file, plan.mutation_kind, flavor
-    ))
-    .chars()
-    .take(6)
-    .collect()
+fn stable_short_digest(seed: &str, flavor: &str) -> String {
+    sha256_digest(&format!("{seed}:{flavor}"))
+        .chars()
+        .take(6)
+        .collect()
 }
 
 fn fixed_hex(plan: &MutationPlan) -> String {

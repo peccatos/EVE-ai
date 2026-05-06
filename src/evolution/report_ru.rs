@@ -90,6 +90,8 @@ fn build_report(
         portfolio_reason_ru: entry.portfolio_reason_ru.clone(),
         selected_strategy: entry.selected_strategy.clone(),
         policy_reason_ru: entry.policy_reason_ru.clone(),
+        mutation_class: entry.mutation_class.clone(),
+        hygiene_warning_ru: entry.hygiene_warning_ru.clone(),
         diversity_bonus: entry.diversity_bonus,
         saturation_penalty: entry.saturation_penalty,
         repeated_target_penalty: entry.repeated_target_penalty,
@@ -127,7 +129,7 @@ fn render_markdown(report: &EvolutionReport) -> String {
         String::new()
     } else {
         format!(
-            "\n## Рекомбинация\nГипотеза: {}\nSource patterns: {}\nAvoided risks: {}\nПричина: {}\nPortfolio reason: {}\nSelected strategy: {}\nPolicy reason: {}\nDiversity bonus: {:.2}\nSaturation penalty: {:.2}\nRepeated target penalty: {:.2}\nFinal recombination score: {:.2}\nStrategy bonus: {:.2}\nStrategy saturation penalty: {:.2}\nQuality bonus: {:.2}\nNovelty score: {:.2}\nUseful delta score: {:.2}\nDuplicate suppression score: {:.2}\nRegression avoidance score: {:.2}\nCoverage proxy score: {:.2}\nQuality score: {:.2}\nFinal strategy score: {:.2}\n",
+            "\n## Рекомбинация\nГипотеза: {}\nSource patterns: {}\nAvoided risks: {}\nMutation class: {}\nПричина: {}\nPortfolio reason: {}\nSelected strategy: {}\nPolicy reason: {}\nHygiene warning: {}\nDiversity bonus: {:.2}\nSaturation penalty: {:.2}\nRepeated target penalty: {:.2}\nFinal recombination score: {:.2}\nStrategy bonus: {:.2}\nStrategy saturation penalty: {:.2}\nQuality bonus: {:.2}\nNovelty score: {:.2}\nUseful delta score: {:.2}\nDuplicate suppression score: {:.2}\nRegression avoidance score: {:.2}\nCoverage proxy score: {:.2}\nQuality score: {:.2}\nFinal strategy score: {:.2}\n",
             report.hypothesis_id.as_deref().unwrap_or("нет"),
             if report.source_patterns.is_empty() {
                 "(none)".to_string()
@@ -139,6 +141,7 @@ fn render_markdown(report: &EvolutionReport) -> String {
             } else {
                 report.avoided_risks.join(", ")
             },
+            report.mutation_class,
             report
                 .recombination_reason_ru
                 .as_deref()
@@ -146,6 +149,7 @@ fn render_markdown(report: &EvolutionReport) -> String {
             report.portfolio_reason_ru.as_deref().unwrap_or("нет"),
             report.selected_strategy.as_deref().unwrap_or("нет"),
             report.policy_reason_ru.as_deref().unwrap_or("нет"),
+            report.hygiene_warning_ru.as_deref().unwrap_or("нет"),
             report.diversity_bonus,
             report.saturation_penalty,
             report.repeated_target_penalty,
@@ -224,6 +228,8 @@ fn load_candidate_entry(
         portfolio_reason_ru: None,
         selected_strategy: None,
         policy_reason_ru: None,
+        mutation_class: "legacy".to_string(),
+        hygiene_warning_ru: None,
         diversity_bonus: 0.0,
         saturation_penalty: 0.0,
         repeated_target_penalty: 0.0,

@@ -4,7 +4,10 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::contracts::{EvolutionLogEntry, MutationKind};
-use crate::evolution::{memory, ReplayResult};
+use crate::evolution::{
+    classify_mutation_kind, classify_mutation_kind_label, memory, mutation_class_label,
+    MutationClass, ReplayResult,
+};
 
 pub const DEFAULT_PORTFOLIO_PATH: &str = "memory/portfolio.json";
 
@@ -17,8 +20,15 @@ pub struct MutationPortfolio {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MutationPortfolioEntry {
     pub mutation_kind: String,
+    #[serde(default)]
+    pub mutation_class: MutationClass,
     pub seen_count: u64,
-    pub success_count: u64,
+    #[serde(default, alias = "success_count")]
+    pub useful_success_count: u64,
+    #[serde(default)]
+    pub cosmetic_count: u64,
+    #[serde(default)]
+    pub unsafe_count: u64,
     pub candidate_count: u64,
     pub replay_passed_count: u64,
     pub promoted_count: u64,
@@ -31,8 +41,11 @@ impl Default for MutationPortfolioEntry {
     fn default() -> Self {
         Self {
             mutation_kind: String::new(),
+            mutation_class: MutationClass::Legacy,
             seen_count: 0,
-            success_count: 0,
+            useful_success_count: 0,
+            cosmetic_count: 0,
+            unsafe_count: 0,
             candidate_count: 0,
             replay_passed_count: 0,
             promoted_count: 0,
@@ -50,7 +63,10 @@ pub fn load_portfolio(memory_root: &str) -> Result<MutationPortfolio, String> {
     }
     let contents =
         fs::read_to_string(path).map_err(|error| format!("failed to read portfolio: {error}"))?;
-    serde_json::from_str(&contents).map_err(|error| format!("failed to parse portfolio: {error}"))
+    let mut portfolio: MutationPortfolio = serde_json::from_str(&contents)
+        .map_err(|error| format!("failed to parse portfolio: {error}"))?;
+    normalize_portfolio_classes(&mut portfolio);
+    Ok(portfolio)
 }
 
 pub fn print_portfolio(memory_root: &str) -> Result<String, String> {
@@ -63,10 +79,13 @@ pub fn print_portfolio(memory_root: &str) -> Result<String, String> {
         .iter()
         .map(|entry| {
             format!(
-                "{} seen={} success={} candidates={} replay_passed={} promoted={} avg_score={:.2} saturation={:.2} last_used_at={}",
+                "{} class={} seen={} useful_success={} cosmetic={} unsafe={} candidates={} replay_passed={} promoted={} avg_score={:.2} saturation={:.2} last_used_at={}",
                 entry.mutation_kind,
+                mutation_class_label(entry.mutation_class),
                 entry.seen_count,
-                entry.success_count,
+                entry.useful_success_count,
+                entry.cosmetic_count,
+                entry.unsafe_count,
                 entry.candidate_count,
                 entry.replay_passed_count,
                 entry.promoted_count,
@@ -92,16 +111,29 @@ pub fn refresh_portfolio(memory_root: &str) -> Result<MutationPortfolio, String>
     let logs = load_logs(memory_root)?;
     for entry in &logs {
         let kind = entry.mutation_kind.to_ascii_lowercase();
+        let class = classify_mutation_kind_label(&kind, entry.useful_change);
         let slot = upsert_entry(&mut portfolio, &kind);
+        slot.mutation_class = merge_class(slot.mutation_class, class);
         let previous_seen = slot.seen_count;
         slot.seen_count += 1;
-        if entry.cargo_check_ok && entry.cargo_test_ok {
-            slot.success_count += 1;
+        if class == MutationClass::Useful && entry.cargo_check_ok && entry.cargo_test_ok {
+            slot.useful_success_count += 1;
         }
-        if entry.status == crate::contracts::EvolutionStatus::Candidate {
+        if class == MutationClass::Cosmetic {
+            slot.cosmetic_count += 1;
+        }
+        if class == MutationClass::Unsafe {
+            slot.unsafe_count += 1;
+        }
+        if class == MutationClass::Useful
+            && entry.status == crate::contracts::EvolutionStatus::Candidate
+        {
             slot.candidate_count += 1;
         }
-        if entry.status == crate::contracts::EvolutionStatus::Promoted || entry.retained_in_core {
+        if class == MutationClass::Useful
+            && (entry.status == crate::contracts::EvolutionStatus::Promoted
+                || entry.retained_in_core)
+        {
             slot.promoted_count += 1;
         }
         slot.average_score = if previous_seen == 0 {
@@ -136,8 +168,13 @@ pub fn refresh_portfolio(memory_root: &str) -> Result<MutationPortfolio, String>
                     .and_then(|name| name.to_str())
                     .unwrap_or_default();
                 if let Ok(mutation) = memory::load_candidate(memory_root, run_id) {
-                    let slot = upsert_entry(&mut portfolio, &kind_label(mutation.kind));
-                    slot.replay_passed_count += 1;
+                    let kind = kind_label(mutation.kind);
+                    let class = classify_mutation_kind(mutation.kind, true);
+                    let slot = upsert_entry(&mut portfolio, &kind);
+                    slot.mutation_class = merge_class(slot.mutation_class, class);
+                    if class == MutationClass::Useful {
+                        slot.replay_passed_count += 1;
+                    }
                     slot.last_used_at = slot.last_used_at.max(replay.timestamp_unix);
                 }
             }
@@ -155,16 +192,27 @@ pub fn update_portfolio_after_log(
 ) -> Result<MutationPortfolio, String> {
     let mut portfolio = load_portfolio(memory_root)?;
     let kind = entry.mutation_kind.to_ascii_lowercase();
+    let class = classify_mutation_kind_label(&kind, entry.useful_change);
     let slot = upsert_entry(&mut portfolio, &kind);
+    slot.mutation_class = merge_class(slot.mutation_class, class);
     let previous_seen = slot.seen_count;
     slot.seen_count += 1;
-    if entry.cargo_check_ok && entry.cargo_test_ok {
-        slot.success_count += 1;
+    if class == MutationClass::Useful && entry.cargo_check_ok && entry.cargo_test_ok {
+        slot.useful_success_count += 1;
     }
-    if entry.status == crate::contracts::EvolutionStatus::Candidate {
+    if class == MutationClass::Cosmetic {
+        slot.cosmetic_count += 1;
+    }
+    if class == MutationClass::Unsafe {
+        slot.unsafe_count += 1;
+    }
+    if class == MutationClass::Useful
+        && entry.status == crate::contracts::EvolutionStatus::Candidate
+    {
         slot.candidate_count += 1;
     }
-    if entry.status == crate::contracts::EvolutionStatus::Promoted {
+    if class == MutationClass::Useful && entry.status == crate::contracts::EvolutionStatus::Promoted
+    {
         slot.promoted_count += 1;
     }
     slot.average_score = if previous_seen == 0 {
@@ -190,8 +238,13 @@ pub fn update_portfolio_after_replay(
         && replay.cargo_run_ok
         && replay.replay_status != crate::contracts::EvolutionStatus::Failed
     {
-        let slot = upsert_entry(&mut portfolio, &kind_label(mutation_kind));
-        slot.replay_passed_count += 1;
+        let kind = kind_label(mutation_kind);
+        let class = classify_mutation_kind(mutation_kind, true);
+        let slot = upsert_entry(&mut portfolio, &kind);
+        slot.mutation_class = merge_class(slot.mutation_class, class);
+        if class == MutationClass::Useful {
+            slot.replay_passed_count += 1;
+        }
         slot.last_used_at = replay.timestamp_unix;
     }
     refresh_saturation_scores(&mut portfolio);
@@ -263,4 +316,26 @@ fn refresh_saturation_scores(portfolio: &mut MutationPortfolio) {
 
 pub fn kind_label(kind: MutationKind) -> String {
     format!("{kind:?}").to_ascii_lowercase()
+}
+
+fn normalize_portfolio_classes(portfolio: &mut MutationPortfolio) {
+    for entry in &mut portfolio.kinds {
+        if entry.mutation_class == MutationClass::Legacy {
+            entry.mutation_class = classify_mutation_kind_label(
+                &entry.mutation_kind,
+                entry.useful_success_count > 0
+                    || entry.candidate_count > 0
+                    || entry.promoted_count > 0,
+            );
+        }
+    }
+}
+
+fn merge_class(current: MutationClass, next: MutationClass) -> MutationClass {
+    match (current, next) {
+        (MutationClass::Unsafe, _) | (_, MutationClass::Unsafe) => MutationClass::Unsafe,
+        (MutationClass::Cosmetic, _) | (_, MutationClass::Cosmetic) => MutationClass::Cosmetic,
+        (MutationClass::Useful, _) | (_, MutationClass::Useful) => MutationClass::Useful,
+        _ => MutationClass::Legacy,
+    }
 }
