@@ -36,7 +36,7 @@ fn zero_candidate_campaign_writes_reason_and_blockers() {
 
     assert_eq!(
         campaign.zero_candidate_reason.as_deref(),
-        Some("allowed_targets_filtered_all")
+        Some("task_constraints_too_narrow")
     );
     assert!(!campaign.blocker_counts.is_empty());
     assert!(campaign.allowed_target_miss_count > 0);
@@ -46,7 +46,7 @@ fn zero_candidate_campaign_writes_reason_and_blockers() {
         print_campaign_report(root.join("memory").to_str().unwrap(), &campaign.campaign_id)
             .expect("report");
     assert!(report.contains("## Диагностика результата"));
-    assert!(report.contains("zero_candidate_reason=allowed_targets_filtered_all"));
+    assert!(report.contains("zero_candidate_reason=task_constraints_too_narrow"));
 
     let feedback_path = root
         .join("memory/tasks/feedback")
@@ -84,7 +84,7 @@ fn allowed_kind_and_below_score_counts_increment() {
     .expect("kind campaign");
     assert_eq!(
         kind_campaign.zero_candidate_reason.as_deref(),
-        Some("allowed_kinds_filtered_all")
+        Some("task_constraints_too_narrow")
     );
     assert!(kind_campaign.allowed_kind_miss_count > 0);
 
@@ -452,6 +452,30 @@ fn sample_campaign(
         repeated_target_penalty_count: 0,
         generated_plan_count: 0,
         accepted_plan_count: 0,
+        candidate_generated_count: 0,
+        candidate_useful_count: 0,
+        candidate_rejected_count: 0,
+        candidate_rejected_below_min_score: 0,
+        candidate_rejected_duplicate_payload: 0,
+        candidate_rejected_failed_validator: 0,
+        candidate_rejected_failed_replay: 0,
+        candidate_rejected_not_useful: 0,
+        candidate_rejected_already_promoted: 0,
+        candidate_recovery_reason: Some("no_valid_plan".to_string()),
+        recombination_fallback_attempted: false,
+        recombination_fallback_used: false,
+        recombination_candidates_seen: 0,
+        recombination_accepted: 0,
+        recombination_rejected_by_target: 0,
+        recombination_rejected_by_kind: 0,
+        recombination_rejected_by_risk: 0,
+        recombination_rejected_by_forbidden_target: 0,
+        recombination_rejected_by_class: 0,
+        selected_hypothesis_id: None,
+        selected_target: None,
+        selected_kind: None,
+        selected_risk: None,
+        recombination_fallback_reason: Some("fixture".to_string()),
     }
 }
 

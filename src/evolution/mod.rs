@@ -1,6 +1,8 @@
 pub mod autonomy;
 pub mod benchmark;
+pub mod bounded_loop;
 pub mod campaign;
+pub mod campaign_recombination;
 pub mod classification;
 pub mod corpus;
 pub mod corpus_validator;
@@ -15,6 +17,9 @@ pub mod metrics;
 pub mod mutation_portfolio;
 pub mod mutator;
 pub mod patterns;
+pub mod policy_feedback;
+pub mod promotion_queue;
+pub mod proof;
 pub mod quality;
 pub mod recombination;
 pub mod regression_memory;
@@ -24,6 +29,7 @@ pub mod scorer;
 pub mod strategy_portfolio;
 pub mod strategy_task_suggester;
 pub mod success_memory;
+pub mod supervisor;
 pub mod task_validator;
 pub mod task_yield;
 pub mod templates;
@@ -33,9 +39,18 @@ pub use autonomy::{autonomy_status, AutonomyStatus};
 pub use benchmark::{
     count_sandbox_leaks, print_benchmark, run_benchmark, run_planned_cycles, EvolutionBenchmark,
 };
+pub use bounded_loop::{
+    list_bounded_runs, print_bounded_run_report, print_last_bounded_run, run_bounded_evolution,
+    BoundedRunSummary,
+};
 pub use campaign::{
     print_campaign, print_campaign_report, print_last_campaign_report, run_stored_campaign,
     run_task_from_path, CampaignBlockerCount, EvolutionCampaign,
+};
+pub use campaign_recombination::{
+    preview_campaign_recombination, select_task_compatible_from_hypotheses,
+    select_task_compatible_hypothesis, CampaignRecombinationDiagnostics,
+    CampaignRecombinationPreview,
 };
 pub use classification::{
     classify_mutation_kind, classify_mutation_kind_label, mutation_class_label, MutationClass,
@@ -73,6 +88,14 @@ pub use mutation_portfolio::{
 };
 pub use mutator::apply_mutation;
 pub use patterns::{distill_patterns, DistilledPatternSummary};
+pub use policy_feedback::{load_policy_feedback, update_policy_feedback, PolicyFeedback};
+pub use promotion_queue::{
+    candidate_lifecycle, load_or_refresh_promotion_queue, load_promotion_queue,
+    print_promotion_queue, promotion_blocked_items, promotion_ready_items, refresh_promotion_queue,
+};
+pub use proof::{
+    build_proof_report, print_eva_status, print_proof_json, print_proof_report, run_demo,
+};
 pub use quality::{
     compute_quality_for_hypothesis, compute_quality_for_run, print_quality_report, QualityMetricsV2,
 };
@@ -91,6 +114,10 @@ pub use strategy_portfolio::{
 };
 pub use strategy_task_suggester::{list_suggested_tasks, suggest_strategy_tasks};
 pub use success_memory::{load_success_patterns, record_success_pattern, SuccessPatternEntry};
+pub use supervisor::{
+    latest_supervised_run_id, list_supervised_runs, print_last_supervised_run,
+    print_supervised_run_report, supervise_task,
+};
 pub use task_validator::{
     load_stored_task_contract, load_task_contract, matches_target_patterns, store_task_contract,
     validate_task_contract,
