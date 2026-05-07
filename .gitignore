@@ -48,3 +48,7 @@ memory/tasks/feedback/
 memory/tasks/adjusted/
 memory/bounded_runs/
 memory/policy_feedback.json
+memory/promotion_queue.json
+memory/promotion_queue.ru.md
+memory/supervised_runs/
+memory/proof/

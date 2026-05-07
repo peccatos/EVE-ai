@@ -158,6 +158,45 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
   cargo run -- --list-bounded-runs
       List stored bounded run ids.
 
+  cargo run -- --refresh-promotion-queue
+      Rebuild the deterministic promotion queue from local candidate memory.
+
+  cargo run -- --promotion-queue
+      Print the current Russian promotion queue summary.
+
+  cargo run -- --promotion-ready
+      Print promotion-queue items that are ready for manual review.
+
+  cargo run -- --promotion-blocked
+      Print promotion-queue items that are not ready for manual review.
+
+  cargo run -- --candidate-lifecycle <RUN_ID>
+      Print deterministic lifecycle state for one candidate.
+
+  cargo run -- --supervise-task <PATH_TO_TASK_JSON> [--max-rounds N]
+      Run supervised operator rounds on top of bounded evolution without auto-promotion.
+
+  cargo run -- --last-supervised-run
+      Print the latest Russian supervised-run report.
+
+  cargo run -- --supervised-run-report <SUPERVISED_RUN_ID>
+      Print a specific Russian supervised-run report.
+
+  cargo run -- --list-supervised-runs
+      List stored supervised run ids.
+
+  cargo run -- --eva-status
+      Print compact local EVA operator status.
+
+  cargo run -- --proof-report
+      Print the current Russian proof/demo report.
+
+  cargo run -- --proof-json
+      Print deterministic proof/demo JSON.
+
+  cargo run -- --demo
+      Safely refresh local operator proof artifacts and print a repeatable demo snapshot.
+
   cargo run -- --distill-patterns
       Distill local-only successful and risky evolution patterns into memory/patterns/.
 
@@ -228,10 +267,29 @@ pub enum RuntimeCliCommand {
     LastTaskAdjustment,
     ListAdjustedTasks,
     CampaignRecombinePreview(String),
-    EvolveBounded { task_path: String, cycles: usize },
+    EvolveBounded {
+        task_path: String,
+        cycles: usize,
+    },
     LastBoundedRun,
     BoundedRunReport(String),
     ListBoundedRuns,
+    RefreshPromotionQueue,
+    PromotionQueue,
+    PromotionReady,
+    PromotionBlocked,
+    CandidateLifecycle(String),
+    SuperviseTask {
+        task_path: String,
+        max_rounds: usize,
+    },
+    LastSupervisedRun,
+    SupervisedRunReport(String),
+    ListSupervisedRuns,
+    EvaStatus,
+    ProofReport,
+    ProofJson,
+    Demo,
     DistillPatterns,
     RecombinePatterns,
     EvolveRecombined,
@@ -400,6 +458,36 @@ impl RuntimeCliCommand {
         if raw_args == ["--list-bounded-runs"] {
             return Ok(Self::ListBoundedRuns);
         }
+        if raw_args == ["--refresh-promotion-queue"] {
+            return Ok(Self::RefreshPromotionQueue);
+        }
+        if raw_args == ["--promotion-queue"] {
+            return Ok(Self::PromotionQueue);
+        }
+        if raw_args == ["--promotion-ready"] {
+            return Ok(Self::PromotionReady);
+        }
+        if raw_args == ["--promotion-blocked"] {
+            return Ok(Self::PromotionBlocked);
+        }
+        if raw_args == ["--last-supervised-run"] {
+            return Ok(Self::LastSupervisedRun);
+        }
+        if raw_args == ["--list-supervised-runs"] {
+            return Ok(Self::ListSupervisedRuns);
+        }
+        if raw_args == ["--eva-status"] {
+            return Ok(Self::EvaStatus);
+        }
+        if raw_args == ["--proof-report"] {
+            return Ok(Self::ProofReport);
+        }
+        if raw_args == ["--proof-json"] {
+            return Ok(Self::ProofJson);
+        }
+        if raw_args == ["--demo"] {
+            return Ok(Self::Demo);
+        }
         if raw_args.len() == 2 && raw_args[0] == "--campaign-report" {
             return Ok(Self::CampaignReport(raw_args[1].clone()));
         }
@@ -411,6 +499,30 @@ impl RuntimeCliCommand {
         }
         if raw_args.len() == 2 && raw_args[0] == "--bounded-run-report" {
             return Ok(Self::BoundedRunReport(raw_args[1].clone()));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--candidate-lifecycle" {
+            return Ok(Self::CandidateLifecycle(raw_args[1].clone()));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--supervised-run-report" {
+            return Ok(Self::SupervisedRunReport(raw_args[1].clone()));
+        }
+        if raw_args.len() == 3
+            && raw_args[0] == "--supervise-task"
+            && raw_args[2].starts_with("--") == false
+        {
+            return Ok(Self::SuperviseTask {
+                task_path: raw_args[1].clone(),
+                max_rounds: 3,
+            });
+        }
+        if raw_args.len() == 4 && raw_args[0] == "--supervise-task" && raw_args[2] == "--max-rounds"
+        {
+            return Ok(Self::SuperviseTask {
+                task_path: raw_args[1].clone(),
+                max_rounds: raw_args[3]
+                    .parse::<usize>()
+                    .map_err(|_| "--supervise-task requires integer --max-rounds".to_string())?,
+            });
         }
         if raw_args.len() == 5
             && raw_args[0] == "--evolve-bounded"
