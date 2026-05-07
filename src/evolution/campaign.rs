@@ -6,14 +6,20 @@ use std::path::Path;
 use crate::contracts::{EvolutionLogEntry, EvolutionStatus, MutationKind, TaskContract};
 use crate::evolution::autonomy::autonomy_status;
 use crate::evolution::benchmark::count_sandbox_leaks;
+use crate::evolution::campaign_recombination::{
+    select_task_compatible_hypothesis, CampaignRecombinationDiagnostics,
+};
 use crate::evolution::memory;
 use crate::evolution::task_validator::{
     load_stored_task_contract, load_task_contract, matches_target_patterns, store_task_contract,
     validate_task_contract,
 };
+use crate::evolution::update_policy_feedback;
 use crate::graph::analyzer::propose_mutation_plans;
 use crate::promotion::review::review_candidate;
-use crate::runtime::run_planned_evolution_cycle_for_task;
+use crate::runtime::{
+    run_planned_evolution_cycle_for_task, run_recombined_evolution_cycle_for_hypothesis,
+};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EvolutionCampaign {
@@ -68,6 +74,54 @@ pub struct EvolutionCampaign {
     pub generated_plan_count: usize,
     #[serde(default)]
     pub accepted_plan_count: usize,
+    #[serde(default)]
+    pub candidate_generated_count: usize,
+    #[serde(default)]
+    pub candidate_useful_count: usize,
+    #[serde(default)]
+    pub candidate_rejected_count: usize,
+    #[serde(default)]
+    pub candidate_rejected_below_min_score: usize,
+    #[serde(default)]
+    pub candidate_rejected_duplicate_payload: usize,
+    #[serde(default)]
+    pub candidate_rejected_failed_validator: usize,
+    #[serde(default)]
+    pub candidate_rejected_failed_replay: usize,
+    #[serde(default)]
+    pub candidate_rejected_not_useful: usize,
+    #[serde(default)]
+    pub candidate_rejected_already_promoted: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate_recovery_reason: Option<String>,
+    #[serde(default)]
+    pub recombination_fallback_attempted: bool,
+    #[serde(default)]
+    pub recombination_fallback_used: bool,
+    #[serde(default)]
+    pub recombination_candidates_seen: usize,
+    #[serde(default)]
+    pub recombination_accepted: usize,
+    #[serde(default)]
+    pub recombination_rejected_by_target: usize,
+    #[serde(default)]
+    pub recombination_rejected_by_kind: usize,
+    #[serde(default)]
+    pub recombination_rejected_by_risk: usize,
+    #[serde(default)]
+    pub recombination_rejected_by_forbidden_target: usize,
+    #[serde(default)]
+    pub recombination_rejected_by_class: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_hypothesis_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_target: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_risk: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recombination_fallback_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -207,6 +261,30 @@ fn run_campaign(
         repeated_target_penalty_count: 0,
         generated_plan_count: 0,
         accepted_plan_count: 0,
+        candidate_generated_count: 0,
+        candidate_useful_count: 0,
+        candidate_rejected_count: 0,
+        candidate_rejected_below_min_score: 0,
+        candidate_rejected_duplicate_payload: 0,
+        candidate_rejected_failed_validator: 0,
+        candidate_rejected_failed_replay: 0,
+        candidate_rejected_not_useful: 0,
+        candidate_rejected_already_promoted: 0,
+        candidate_recovery_reason: None,
+        recombination_fallback_attempted: false,
+        recombination_fallback_used: false,
+        recombination_candidates_seen: 0,
+        recombination_accepted: 0,
+        recombination_rejected_by_target: 0,
+        recombination_rejected_by_kind: 0,
+        recombination_rejected_by_risk: 0,
+        recombination_rejected_by_forbidden_target: 0,
+        recombination_rejected_by_class: 0,
+        selected_hypothesis_id: None,
+        selected_target: None,
+        selected_kind: None,
+        selected_risk: None,
+        recombination_fallback_reason: None,
     };
     let mut blocker_counts: BTreeMap<String, u64> = BTreeMap::new();
     let mut total_score = 0.0_f32;
@@ -224,16 +302,43 @@ fn run_campaign(
             campaign.rejected_plan_count += diagnostics.generated_plan_count.max(1);
         }
 
-        match run_planned_evolution_cycle_for_task(project_root, memory_root, Some(task)) {
+        let latest_before = latest_log_entry(memory_root)?.map(|entry| entry.run_id);
+        let run_result = if diagnostics.accepted_plan_count == 0 {
+            let (hypothesis, recombination_diagnostics) =
+                select_task_compatible_hypothesis(memory_root, task)?;
+            merge_recombination_diagnostics(&mut campaign, &recombination_diagnostics);
+            if let Some(hypothesis) = hypothesis {
+                run_recombined_evolution_cycle_for_hypothesis(
+                    project_root,
+                    memory_root,
+                    &hypothesis,
+                )
+            } else {
+                Err(recombination_diagnostics
+                    .recombination_fallback_reason
+                    .unwrap_or_else(|| "no recombination fallback available".to_string()))
+            }
+        } else {
+            run_planned_evolution_cycle_for_task(project_root, memory_root, Some(task))
+        };
+
+        match run_result {
             Ok(()) => {}
             Err(error) => {
                 if let Some(entry) = latest_log_entry(memory_root)? {
-                    if entry.duplicate_rejected {
+                    if latest_before.as_deref() != Some(entry.run_id.as_str())
+                        && entry.duplicate_rejected
+                    {
                         campaign.total_cycles += 1;
                         total_score += entry.score;
                         campaign.failed_cycles += 1;
                         campaign.duplicate_rejections += 1;
                         campaign.duplicate_rejection_count += 1;
+                        campaign.candidate_generated_count += 1;
+                        campaign.candidate_rejected_count += 1;
+                        campaign.candidate_rejected_duplicate_payload += 1;
+                        campaign.candidate_recovery_reason =
+                            Some("candidate_rejected_duplicate_payload".to_string());
                         campaign.rejected_plan_count += 1;
                         *blocker_counts
                             .entry("duplicate_bad_mutation".to_string())
@@ -243,6 +348,10 @@ fn run_campaign(
                 }
                 campaign.total_cycles += 1;
                 campaign.failed_cycles += 1;
+                campaign.candidate_rejected_count += 1;
+                campaign.candidate_rejected_failed_validator += 1;
+                campaign.candidate_recovery_reason =
+                    Some("candidate_rejected_failed_validator".to_string());
                 *blocker_counts
                     .entry(blocker_from_error(&error, &diagnostics))
                     .or_insert(0) += 1;
@@ -254,6 +363,7 @@ fn run_campaign(
             .ok_or_else(|| "campaign cycle completed without evolution log entry".to_string())?;
         campaign.total_cycles += 1;
         total_score += entry.score;
+        campaign.candidate_generated_count += 1;
 
         if entry.status == EvolutionStatus::Failed {
             campaign.failed_cycles += 1;
@@ -263,6 +373,10 @@ fn run_campaign(
         if entry.duplicate_rejected {
             campaign.duplicate_rejections += 1;
             campaign.duplicate_rejection_count += 1;
+            campaign.candidate_rejected_count += 1;
+            campaign.candidate_rejected_duplicate_payload += 1;
+            campaign.candidate_recovery_reason =
+                Some("candidate_rejected_duplicate_payload".to_string());
             campaign.rejected_plan_count += 1;
             *blocker_counts
                 .entry("duplicate_bad_mutation".to_string())
@@ -278,11 +392,18 @@ fn run_campaign(
             if entry.non_candidate_reason.is_some() {
                 campaign.rejected_plan_count += 1;
             }
+            campaign.candidate_rejected_count += 1;
+            campaign.candidate_rejected_not_useful += 1;
+            campaign.candidate_recovery_reason = Some("candidate_rejected_not_useful".to_string());
             continue;
         }
 
         if entry.score < task.min_score {
             campaign.below_score_count += 1;
+            campaign.candidate_rejected_count += 1;
+            campaign.candidate_rejected_below_min_score += 1;
+            campaign.candidate_recovery_reason =
+                Some("candidate_rejected_below_min_score".to_string());
             campaign.rejected_plan_count += 1;
             *blocker_counts
                 .entry("below_min_score".to_string())
@@ -299,6 +420,10 @@ fn run_campaign(
                 campaign.replay_passed += 1;
             } else {
                 campaign.replay_failed += 1;
+                campaign.candidate_rejected_count += 1;
+                campaign.candidate_rejected_failed_replay += 1;
+                campaign.candidate_recovery_reason =
+                    Some("candidate_rejected_failed_replay".to_string());
             }
         }
 
@@ -311,11 +436,16 @@ fn run_campaign(
         }
         if already_promoted {
             campaign.already_promoted_count += 1;
+            campaign.candidate_rejected_count += 1;
+            campaign.candidate_rejected_already_promoted += 1;
+            campaign.candidate_recovery_reason =
+                Some("candidate_rejected_already_promoted".to_string());
             campaign.rejected_plan_count += 1;
             continue;
         }
 
         campaign.useful_candidates += 1;
+        campaign.candidate_useful_count += 1;
         campaign.candidate_run_ids.push(entry.run_id.clone());
         if review.promotion_allowed {
             campaign.promotion_ready_candidates += 1;
@@ -338,12 +468,10 @@ fn run_campaign(
     if campaign.total_cycles > 0 && campaign.useful_candidates == 0 {
         let reason = infer_zero_candidate_reason(&campaign);
         campaign.zero_candidate_reason = Some(reason.clone());
-        *blocker_counts.entry(reason.clone()).or_insert(0) += 1;
-        if campaign.blocker_counts.is_empty() && blocker_counts.is_empty() {
-            *blocker_counts
-                .entry("unknown_zero_yield".to_string())
-                .or_insert(0) += 1;
+        if campaign.candidate_recovery_reason.is_none() {
+            campaign.candidate_recovery_reason = Some(reason.clone());
         }
+        *blocker_counts.entry(reason.clone()).or_insert(0) += 1;
     }
 
     campaign.blocker_counts = blocker_counts
@@ -353,6 +481,7 @@ fn run_campaign(
 
     write_campaign(memory_root, task, &campaign)?;
     maybe_write_feedback(memory_root, &campaign)?;
+    let _ = update_policy_feedback(memory_root, &campaign);
     Ok(campaign)
 }
 
@@ -398,22 +527,8 @@ fn render_campaign_markdown(task: &TaskContract, campaign: &EvolutionCampaign) -
         .zero_candidate_reason
         .clone()
         .unwrap_or_else(|| "none".to_string());
-    let diagnostics_recommendation = if campaign.useful_candidates == 0 {
-        [
-            "- loosen allowed_targets",
-            "- add another allowed mutation kind",
-            "- reduce min_score",
-            "- allow src/evolution/* for metrics/reporting tasks",
-            "- run --recombine-patterns before campaign",
-            "- inspect --evolution-policy",
-        ]
-        .join("\n")
-    } else {
-        "Кампания дала хотя бы один полезный кандидат, ограничения можно оставлять жёсткими."
-            .to_string()
-    };
     format!(
-        "# Campaign EVA\n\n## Цель задачи\n{}\n\n## Ограничения\ncycles={} max_risk={:.2} min_score={:.2} require_replay={} auto_promote={}\nallowed_targets={:?}\nallowed_kinds={:?}\nsource_corpus_id={}\ncorpus_derived={}\n\n## Количество циклов\n{}\n\n## Найденные кандидаты\nПолезных кандидатов: {}\nГотовых к promotion-review: {}\n\n## Replay\nПопыток: {}\nПройдено: {}\nНе пройдено: {}\n\n## Причины отказа по кандидатам\n{}\n\n## Готовые к promotion кандидаты\n{}\n\n## Диагностика результата\nzero_candidate_reason={}\ngenerated_plan_count={}\naccepted_plan_count={}\nrejected_plan_count={}\nfiltered_by_task_count={}\nno_valid_plan_count={}\nallowed_target_miss_count={}\nallowed_kind_miss_count={}\nduplicate_rejection_count={}\nbelow_score_count={}\nalready_promoted_count={}\nrepeated_target_penalty_count={}\n\n## Риски\nforbidden_mutations={} sandbox_leaks={} duplicate_rejections={}\n\n## Итог EVA\nЕва выполнила {} sandbox-циклов. Найдено {} полезных кандидата(ов), {} прошли replay. Promotion автоматически не выполнялся.\n\n## Рекомендация следующего шага\n{}",
+        "# Campaign EVA\n\n## Цель задачи\n{}\n\n## Ограничения\ncycles={} max_risk={:.2} min_score={:.2} require_replay={} auto_promote={}\nallowed_targets={:?}\nallowed_kinds={:?}\nsource_corpus_id={}\ncorpus_derived={}\n\n## Количество циклов\n{}\n\n## Найденные кандидаты\nПолезных кандидатов: {}\nГотовых к promotion-review: {}\n\n## Replay\nПопыток: {}\nПройдено: {}\nНе пройдено: {}\n\n## Причины отказа по кандидатам\n{}\n\n## Готовые к promotion кандидаты\n{}\n\n## Диагностика результата\nzero_candidate_reason={}\ngenerated_plan_count={}\naccepted_plan_count={}\nrejected_plan_count={}\nfiltered_by_task_count={}\nno_valid_plan_count={}\nallowed_target_miss_count={}\nallowed_kind_miss_count={}\nduplicate_rejection_count={}\nbelow_score_count={}\nalready_promoted_count={}\nrepeated_target_penalty_count={}\n\n## Recombination fallback\nrecombination_fallback_attempted={}\nrecombination_fallback_used={}\nrecombination_candidates_seen={}\nrecombination_accepted={}\nrecombination_rejected_by_target={}\nrecombination_rejected_by_kind={}\nrecombination_rejected_by_risk={}\nrecombination_rejected_by_forbidden_target={}\nrecombination_rejected_by_class={}\nselected_hypothesis_id={:?}\nselected_target={:?}\nselected_kind={:?}\nselected_risk={:?}\nrecombination_fallback_reason={:?}\n\n## Candidate recovery\ncandidate_generated_count={}\ncandidate_useful_count={}\ncandidate_rejected_count={}\ncandidate_rejected_below_min_score={}\ncandidate_rejected_duplicate_payload={}\ncandidate_rejected_failed_validator={}\ncandidate_rejected_failed_replay={}\ncandidate_rejected_not_useful={}\ncandidate_rejected_already_promoted={}\ncandidate_recovery_reason={:?}\n\n## Риски\nforbidden_mutations={} sandbox_leaks={} duplicate_rejections={}\n\n## Итог EVA\nЕва выполнила {} sandbox-циклов. Найдено {} полезных кандидата(ов), {} прошли replay. Promotion автоматически не выполнялся.\n\n## Рекомендация следующего шага\n{}",
         task.goal_ru,
         task.cycles,
         task.max_risk,
@@ -444,13 +559,41 @@ fn render_campaign_markdown(task: &TaskContract, campaign: &EvolutionCampaign) -
         campaign.below_score_count,
         campaign.already_promoted_count,
         campaign.repeated_target_penalty_count,
+        campaign.recombination_fallback_attempted,
+        campaign.recombination_fallback_used,
+        campaign.recombination_candidates_seen,
+        campaign.recombination_accepted,
+        campaign.recombination_rejected_by_target,
+        campaign.recombination_rejected_by_kind,
+        campaign.recombination_rejected_by_risk,
+        campaign.recombination_rejected_by_forbidden_target,
+        campaign.recombination_rejected_by_class,
+        campaign.selected_hypothesis_id,
+        campaign.selected_target,
+        campaign.selected_kind,
+        campaign.selected_risk,
+        campaign.recombination_fallback_reason,
+        campaign.candidate_generated_count,
+        campaign.candidate_useful_count,
+        campaign.candidate_rejected_count,
+        campaign.candidate_rejected_below_min_score,
+        campaign.candidate_rejected_duplicate_payload,
+        campaign.candidate_rejected_failed_validator,
+        campaign.candidate_rejected_failed_replay,
+        campaign.candidate_rejected_not_useful,
+        campaign.candidate_rejected_already_promoted,
+        campaign.candidate_recovery_reason,
         campaign.forbidden_mutations,
         campaign.sandbox_leaks,
         campaign.duplicate_rejections,
         campaign.total_cycles,
         campaign.useful_candidates,
         campaign.replay_passed,
-        diagnostics_recommendation,
+        if campaign.promotion_ready_candidates > 0 {
+            "Рекомендуется вручную рассмотреть replay-подтверждённые кандидаты через --review-candidate."
+        } else {
+            "Если zero-yield повторится, изучите adjustment draft и bounded loop feedback."
+        }
     )
 }
 
@@ -509,6 +652,13 @@ fn collect_cycle_diagnostics(
 }
 
 fn infer_zero_candidate_reason(campaign: &EvolutionCampaign) -> String {
+    if campaign.recombination_fallback_attempted
+        && !campaign.recombination_fallback_used
+        && campaign.accepted_plan_count == 0
+        && campaign.filtered_by_task_count > 0
+    {
+        return "task_constraints_too_narrow".to_string();
+    }
     if campaign.no_valid_plan_count > 0 && campaign.generated_plan_count == 0 {
         return "no_valid_plan".to_string();
     }
@@ -719,6 +869,31 @@ fn is_forbidden_target(target_file: &str) -> bool {
         || target_file == "src/lib.rs"
         || target_file == "Cargo.toml"
         || target_file.ends_with("/Cargo.toml")
+}
+
+fn merge_recombination_diagnostics(
+    campaign: &mut EvolutionCampaign,
+    diagnostics: &CampaignRecombinationDiagnostics,
+) {
+    campaign.recombination_fallback_attempted |= diagnostics.recombination_fallback_attempted;
+    campaign.recombination_fallback_used |= diagnostics.recombination_fallback_used;
+    campaign.recombination_candidates_seen += diagnostics.recombination_candidates_seen;
+    campaign.recombination_accepted += diagnostics.recombination_accepted;
+    campaign.recombination_rejected_by_target += diagnostics.recombination_rejected_by_target;
+    campaign.recombination_rejected_by_kind += diagnostics.recombination_rejected_by_kind;
+    campaign.recombination_rejected_by_risk += diagnostics.recombination_rejected_by_risk;
+    campaign.recombination_rejected_by_forbidden_target +=
+        diagnostics.recombination_rejected_by_forbidden_target;
+    campaign.recombination_rejected_by_class += diagnostics.recombination_rejected_by_class;
+    if diagnostics.selected_hypothesis_id.is_some() {
+        campaign.selected_hypothesis_id = diagnostics.selected_hypothesis_id.clone();
+        campaign.selected_target = diagnostics.selected_target.clone();
+        campaign.selected_kind = diagnostics.selected_kind.clone();
+        campaign.selected_risk = diagnostics.selected_risk;
+    }
+    if diagnostics.recombination_fallback_reason.is_some() {
+        campaign.recombination_fallback_reason = diagnostics.recombination_fallback_reason.clone();
+    }
 }
 
 #[allow(dead_code)]

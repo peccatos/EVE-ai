@@ -1,6 +1,8 @@
 pub mod autonomy;
 pub mod benchmark;
+pub mod bounded_loop;
 pub mod campaign;
+pub mod campaign_recombination;
 pub mod classification;
 pub mod corpus;
 pub mod corpus_validator;
@@ -15,6 +17,7 @@ pub mod metrics;
 pub mod mutation_portfolio;
 pub mod mutator;
 pub mod patterns;
+pub mod policy_feedback;
 pub mod quality;
 pub mod recombination;
 pub mod regression_memory;
@@ -33,9 +36,18 @@ pub use autonomy::{autonomy_status, AutonomyStatus};
 pub use benchmark::{
     count_sandbox_leaks, print_benchmark, run_benchmark, run_planned_cycles, EvolutionBenchmark,
 };
+pub use bounded_loop::{
+    list_bounded_runs, print_bounded_run_report, print_last_bounded_run, run_bounded_evolution,
+    BoundedRunSummary,
+};
 pub use campaign::{
     print_campaign, print_campaign_report, print_last_campaign_report, run_stored_campaign,
     run_task_from_path, CampaignBlockerCount, EvolutionCampaign,
+};
+pub use campaign_recombination::{
+    preview_campaign_recombination, select_task_compatible_from_hypotheses,
+    select_task_compatible_hypothesis, CampaignRecombinationDiagnostics,
+    CampaignRecombinationPreview,
 };
 pub use classification::{
     classify_mutation_kind, classify_mutation_kind_label, mutation_class_label, MutationClass,
@@ -73,6 +85,7 @@ pub use mutation_portfolio::{
 };
 pub use mutator::apply_mutation;
 pub use patterns::{distill_patterns, DistilledPatternSummary};
+pub use policy_feedback::{load_policy_feedback, update_policy_feedback, PolicyFeedback};
 pub use quality::{
     compute_quality_for_hypothesis, compute_quality_for_run, print_quality_report, QualityMetricsV2,
 };

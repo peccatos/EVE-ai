@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::contracts::TaskContract;
 use crate::evolution::{
-    autonomy_status, ensure_strategy_portfolio, load_metrics, load_portfolio, load_regressions,
-    load_success_patterns, MutationClass,
+    autonomy_status, ensure_strategy_portfolio, load_metrics, load_policy_feedback, load_portfolio,
+    load_regressions, load_success_patterns, MutationClass,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -68,6 +68,7 @@ fn build_policy(
     let successes = load_success_patterns(memory_root)?;
     let autonomy = autonomy_status(project_root, memory_root)?;
     let metrics = load_metrics(memory_root)?;
+    let feedback = load_policy_feedback(memory_root).unwrap_or_default();
 
     let addunittest_saturated = mutation_portfolio
         .kinds
@@ -146,6 +147,30 @@ fn build_policy(
     if metrics.promoted_count >= 3 {
         bump(&mut strategy_scores, "RegressionAvoidance", 0.05);
     }
+    if feedback.repeated_task_constraints_too_narrow > 0 {
+        bump(
+            &mut strategy_scores,
+            "ReplaySafety",
+            (feedback.repeated_task_constraints_too_narrow.min(3) as f32) * 0.05,
+        );
+        bump(
+            &mut strategy_scores,
+            "MetricsReporting",
+            (feedback.repeated_task_constraints_too_narrow.min(3) as f32) * 0.04,
+        );
+    }
+    if feedback.repeated_duplicate_payload > 0 {
+        bump(
+            &mut strategy_scores,
+            "RegressionAvoidance",
+            (feedback.repeated_duplicate_payload.min(3) as f32) * 0.04,
+        );
+        bump(
+            &mut strategy_scores,
+            "TestExpansion",
+            -(feedback.repeated_duplicate_payload.min(3) as f32) * 0.03,
+        );
+    }
 
     let mut selected_strategy = strategy_scores[0].0.to_string();
     let mut selected_score = strategy_scores[0].1;
@@ -187,17 +212,24 @@ fn build_policy(
     } else {
         0.18
     };
+    let suggested_min_score =
+        (7.0 - (feedback.repeated_below_min_score.min(4) as f32 * 0.5)).max(5.0);
 
     Ok(EvolutionPolicy {
         selected_strategy: selected_strategy.clone(),
         policy_reason_ru: format!(
-            "Политика выбрала стратегию {}: saturation addunittest={}, runtime_regressions={}, metrics_success={}, autonomy_level={}, risk_limit={:.2}, cosmetic_legacy_ignored={}.",
+            "Политика выбрала стратегию {}: saturation addunittest={}, runtime_regressions={}, metrics_success={}, autonomy_level={}, risk_limit={:.2}, suggested_min_score={:.2}, feedback_zero_yield={}, feedback_narrow={}, feedback_duplicate={}, feedback_below_min_score={}, cosmetic_legacy_ignored={}.",
             selected_strategy,
             addunittest_saturated,
             runtime_regressions,
             metrics_success,
             autonomy.current_safe_autonomy_level,
             risk_limit,
+            suggested_min_score,
+            feedback.zero_yield_count,
+            feedback.repeated_task_constraints_too_narrow,
+            feedback.repeated_duplicate_payload,
+            feedback.repeated_below_min_score,
             ignored_historical_records
         ),
         allowed_mutation_kinds,

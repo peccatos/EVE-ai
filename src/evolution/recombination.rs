@@ -10,8 +10,9 @@ use crate::contracts::{
 };
 use crate::evolution::{
     compute_quality_for_hypothesis, ensure_portfolio, ensure_strategy_portfolio, generator,
-    load_or_refresh_evolution_policy, memory, CandidateSummary, EvolutionMetrics, MutationClass,
-    MutationPortfolio, MutationPortfolioEntry, RegressionEntry, SuccessPatternEntry,
+    load_or_refresh_evolution_policy, load_policy_feedback, memory, CandidateSummary,
+    EvolutionMetrics, MutationClass, MutationPortfolio, MutationPortfolioEntry, PolicyFeedback,
+    RegressionEntry, SuccessPatternEntry,
 };
 use crate::graph::{load_graph, EvolutionGraph};
 
@@ -621,9 +622,12 @@ fn build_hypothesis(
     } else {
         0.0
     };
+    let feedback = load_policy_feedback(memory_root).unwrap_or_default();
+    let feedback_bonus = feedback_adjustment(&feedback, &option.mutation_kind, &option.target);
     let final_strategy_score = (final_recombination_score + strategy_bonus + quality_bonus
         - strategy_saturation_penalty
-        - policy_risk_penalty)
+        - policy_risk_penalty
+        + feedback_bonus)
         .clamp(-1.0, 3.0);
 
     let contamination_note = portfolio_entry(portfolio, &option.mutation_kind).and_then(|entry| {
@@ -859,4 +863,23 @@ fn sanitize_id(value: &str) -> String {
         .collect::<String>()
         .trim_matches('_')
         .to_ascii_lowercase()
+}
+
+fn feedback_adjustment(feedback: &PolicyFeedback, kind: &str, target: &str) -> f32 {
+    let mut bonus = 0.0;
+    if feedback.repeated_task_constraints_too_narrow > 0
+        && matches!(
+            kind,
+            "addreplayassertion" | "addmetricupdate" | "addlearningsummaryfield"
+        )
+    {
+        bonus += (feedback.repeated_task_constraints_too_narrow.min(3) as f32) * 0.03;
+    }
+    if feedback.repeated_duplicate_payload > 0 && target != GENERATED_TEST_TARGET {
+        bonus += (feedback.repeated_duplicate_payload.min(3) as f32) * 0.02;
+    }
+    if feedback.repeated_below_min_score > 0 && kind == "addreplayassertion" {
+        bonus += (feedback.repeated_below_min_score.min(3) as f32) * 0.015;
+    }
+    bonus
 }

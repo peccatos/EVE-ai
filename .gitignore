@@ -46,3 +46,5 @@ memory/tasks/feedback/
 
 # EVA adjusted task runtime state
 memory/tasks/adjusted/
+memory/bounded_runs/
+memory/policy_feedback.json

@@ -125,13 +125,21 @@ pub fn run_planned_evolution_cycle_for_task(
 
 pub fn run_recombined_evolution_cycle(project_root: &str, memory_root: &str) -> Result<(), String> {
     let hypothesis = recombination::top_recombined_hypothesis(memory_root)?;
+    run_recombined_evolution_cycle_for_hypothesis(project_root, memory_root, &hypothesis)
+}
+
+pub fn run_recombined_evolution_cycle_for_hypothesis(
+    project_root: &str,
+    memory_root: &str,
+    hypothesis: &RecombinedHypothesis,
+) -> Result<(), String> {
     let mutation = recombination::generate_from_recombined_hypothesis(&hypothesis)?;
     validator::validate_mutation(&mutation)?;
     run_evolution_cycle_with_mutation(
         project_root,
         memory_root,
         mutation,
-        Some(recombined_plan_context(&hypothesis)),
+        Some(recombined_plan_context(hypothesis)),
     )
 }
 

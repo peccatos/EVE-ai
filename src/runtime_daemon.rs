@@ -143,6 +143,21 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
   cargo run -- --list-adjusted-tasks
       List stored adjusted task ids.
 
+  cargo run -- --campaign-recombine-preview <TASK_PATH>
+      Preview task-compatible recombination fallback diagnostics without mutation or sandbox.
+
+  cargo run -- --evolve-bounded --task <PATH> --cycles <N>
+      Run bounded campaign evolution loop with policy, replay/review, feedback, and adjustment drafts.
+
+  cargo run -- --last-bounded-run
+      Print the latest Russian bounded-run report.
+
+  cargo run -- --bounded-run-report <BOUNDED_RUN_ID>
+      Print a specific Russian bounded-run report.
+
+  cargo run -- --list-bounded-runs
+      List stored bounded run ids.
+
   cargo run -- --distill-patterns
       Distill local-only successful and risky evolution patterns into memory/patterns/.
 
@@ -212,6 +227,11 @@ pub enum RuntimeCliCommand {
     AdjustTaskFromCampaign(String),
     LastTaskAdjustment,
     ListAdjustedTasks,
+    CampaignRecombinePreview(String),
+    EvolveBounded { task_path: String, cycles: usize },
+    LastBoundedRun,
+    BoundedRunReport(String),
+    ListBoundedRuns,
     DistillPatterns,
     RecombinePatterns,
     EvolveRecombined,
@@ -374,11 +394,35 @@ impl RuntimeCliCommand {
         if raw_args == ["--list-adjusted-tasks"] {
             return Ok(Self::ListAdjustedTasks);
         }
+        if raw_args == ["--last-bounded-run"] {
+            return Ok(Self::LastBoundedRun);
+        }
+        if raw_args == ["--list-bounded-runs"] {
+            return Ok(Self::ListBoundedRuns);
+        }
         if raw_args.len() == 2 && raw_args[0] == "--campaign-report" {
             return Ok(Self::CampaignReport(raw_args[1].clone()));
         }
         if raw_args.len() == 2 && raw_args[0] == "--adjust-task-from-campaign" {
             return Ok(Self::AdjustTaskFromCampaign(raw_args[1].clone()));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--campaign-recombine-preview" {
+            return Ok(Self::CampaignRecombinePreview(raw_args[1].clone()));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--bounded-run-report" {
+            return Ok(Self::BoundedRunReport(raw_args[1].clone()));
+        }
+        if raw_args.len() == 5
+            && raw_args[0] == "--evolve-bounded"
+            && raw_args[1] == "--task"
+            && raw_args[3] == "--cycles"
+        {
+            return Ok(Self::EvolveBounded {
+                task_path: raw_args[2].clone(),
+                cycles: raw_args[4]
+                    .parse::<usize>()
+                    .map_err(|_| "--evolve-bounded requires integer cycles".to_string())?,
+            });
         }
         if raw_args == ["--distill-patterns"] {
             return Ok(Self::DistillPatterns);

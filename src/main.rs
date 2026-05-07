@@ -1,18 +1,19 @@
 use eva_runtime_with_task_validator::{
     adjust_task_from_campaign, autonomy_status, build_project_phase_runtime_output, candidate_diff,
     default_corpus_contract, distill_patterns, fix_generated_test_names, ingest_corpus,
-    ingest_repo_patterns, latest_corpus_id, learning_summary, list_adjusted_tasks, list_candidates,
-    list_corpora, list_suggested_tasks, load_corpus_summary, load_metrics, print_benchmark,
+    ingest_repo_patterns, latest_corpus_id, learning_summary, list_adjusted_tasks,
+    list_bounded_runs, list_candidates, list_corpora, list_suggested_tasks, load_corpus_summary,
+    load_metrics, preview_campaign_recombination, print_benchmark, print_bounded_run_report,
     print_campaign, print_campaign_report, print_evolution_policy, print_hygiene_plan,
-    print_hygiene_report, print_last_campaign_report, print_last_report,
+    print_hygiene_report, print_last_bounded_run, print_last_campaign_report, print_last_report,
     print_last_task_adjustment, print_portfolio, print_quality_report, print_report,
     print_strategy_portfolio, promote_candidate, refresh_metrics, refresh_portfolio,
     refresh_report, refresh_strategy_portfolio, render_plans, render_recombined_hypotheses,
-    replay_candidate, review_candidate, run_benchmark, run_evolution_cycle, run_planned_cycles,
-    run_planned_evolution_cycle, run_recombined_evolution_cycle, run_repo_patch_report,
-    run_stored_campaign, run_task_from_path, serve_runtime_daemon, should_run_repo_patch_mode,
-    suggest_strategy_tasks, CycleInput, RepoPatchCliConfig, RuntimeCliCommand, RuntimeCycleRunner,
-    RUNTIME_CLI_HELP,
+    replay_candidate, review_candidate, run_benchmark, run_bounded_evolution, run_evolution_cycle,
+    run_planned_cycles, run_planned_evolution_cycle, run_recombined_evolution_cycle,
+    run_repo_patch_report, run_stored_campaign, run_task_from_path, serve_runtime_daemon,
+    should_run_repo_patch_mode, suggest_strategy_tasks, CycleInput, RepoPatchCliConfig,
+    RuntimeCliCommand, RuntimeCycleRunner, RUNTIME_CLI_HELP,
 };
 use serde::Deserialize;
 use std::fs;
@@ -455,6 +456,67 @@ fn main() {
                 Ok(tasks) => println!("{}", tasks.join("\n")),
                 Err(err) => {
                     eprintln!("list_adjusted_tasks_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::CampaignRecombinePreview(task_path)) => {
+            match eva_runtime_with_task_validator::evolution::load_task_contract(Path::new(
+                &task_path,
+            ))
+            .and_then(|task| preview_campaign_recombination("memory", &task))
+            {
+                Ok(preview) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&preview)
+                        .expect("serialize campaign recombine preview")
+                ),
+                Err(err) => {
+                    eprintln!("campaign_recombine_preview_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::EvolveBounded { task_path, cycles }) => {
+            match run_bounded_evolution(".", "memory", &task_path, cycles) {
+                Ok(summary) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&summary).expect("serialize bounded summary")
+                ),
+                Err(err) => {
+                    eprintln!("evolve_bounded_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::LastBoundedRun) => {
+            match print_last_bounded_run("memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("last_bounded_run_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::BoundedRunReport(bounded_run_id)) => {
+            match print_bounded_run_report("memory", &bounded_run_id) {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("bounded_run_report_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ListBoundedRuns) => {
+            match list_bounded_runs("memory") {
+                Ok(runs) => println!("{}", runs.join("\n")),
+                Err(err) => {
+                    eprintln!("list_bounded_runs_error: {err}");
                     std::process::exit(1);
                 }
             }
