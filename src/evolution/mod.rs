@@ -9,6 +9,7 @@ pub mod corpus_validator;
 pub mod dedup;
 pub mod evolution_policy;
 pub mod generator;
+pub mod governance;
 pub mod hygiene;
 pub mod hypothesis;
 pub mod learning_context;
@@ -16,13 +17,16 @@ pub mod memory;
 pub mod metrics;
 pub mod mutation_portfolio;
 pub mod mutator;
+pub mod operator_approval;
 pub mod patterns;
 pub mod policy_feedback;
 pub mod promotion_queue;
 pub mod proof;
+pub mod proof_snapshot;
 pub mod quality;
 pub mod recombination;
 pub mod regression_memory;
+pub mod release_proposal;
 pub mod report_ru;
 pub mod rollback;
 pub mod scorer;
@@ -71,6 +75,9 @@ pub use evolution_policy::{
 pub use generator::{
     generate_from_plan, generate_from_recombined_hypothesis, generate_safe_mutation,
 };
+pub use governance::{
+    governance_status, governance_trust_gate, promote_approved_candidate, promotion_ready_approved,
+};
 pub use hygiene::{
     fix_generated_test_names, print_hygiene_plan, print_hygiene_report, run_evolution_hygiene,
     HygieneReport,
@@ -87,6 +94,10 @@ pub use mutation_portfolio::{
     MutationPortfolio, MutationPortfolioEntry,
 };
 pub use mutator::apply_mutation;
+pub use operator_approval::{
+    approval_log, approval_status, approve_candidate, defer_candidate, latest_decisions,
+    latest_record_for_run, record_promotion_event, reject_candidate,
+};
 pub use patterns::{distill_patterns, DistilledPatternSummary};
 pub use policy_feedback::{load_policy_feedback, update_policy_feedback, PolicyFeedback};
 pub use promotion_queue::{
@@ -96,6 +107,9 @@ pub use promotion_queue::{
 pub use proof::{
     build_proof_report, print_eva_status, print_proof_json, print_proof_report, run_demo,
 };
+pub use proof_snapshot::{
+    build_proof_snapshot, latest_proof_snapshot_id, print_proof_snapshot, print_proof_snapshot_json,
+};
 pub use quality::{
     compute_quality_for_hypothesis, compute_quality_for_run, print_quality_report, QualityMetricsV2,
 };
@@ -103,6 +117,10 @@ pub use recombination::{
     load_recombined_hypotheses, render_recombined_hypotheses, top_recombined_hypothesis,
 };
 pub use regression_memory::{load_regressions, record_regression, RegressionEntry};
+pub use release_proposal::{
+    build_release_proposal, print_release_proposal, print_release_proposal_json,
+    release_proposal_count,
+};
 pub use report_ru::{
     load_report_json, print_last_report, print_report, refresh_report, write_report,
 };
