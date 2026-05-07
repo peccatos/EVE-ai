@@ -197,6 +197,42 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
   cargo run -- --demo
       Safely refresh local operator proof artifacts and print a repeatable demo snapshot.
 
+  cargo run -- --approve-candidate <RUN_ID> --reason <TEXT>
+      Append an operator approval record for a candidate that already satisfies governance safety.
+
+  cargo run -- --reject-candidate <RUN_ID> --reason <TEXT>
+      Append an operator rejection record for a candidate.
+
+  cargo run -- --defer-candidate <RUN_ID> --reason <TEXT>
+      Append an operator deferred record for a candidate.
+
+  cargo run -- --approval-status <RUN_ID>
+      Print the latest operator approval state for one candidate.
+
+  cargo run -- --approval-log
+      Print the combined append-only governance approval log.
+
+  cargo run -- --governance-status
+      Print compact governance runtime status.
+
+  cargo run -- --promotion-ready-approved
+      Print approved candidates that still pass the governance trust gate.
+
+  cargo run -- --promote-approved <RUN_ID>
+      Run manual promotion only after operator approval and governance trust gate pass.
+
+  cargo run -- --release-proposal
+      Build and print a deterministic local release proposal.
+
+  cargo run -- --release-proposal-json
+      Build and print a deterministic local release proposal JSON.
+
+  cargo run -- --proof-snapshot
+      Capture and print a governance proof snapshot markdown.
+
+  cargo run -- --proof-snapshot-json
+      Capture and print a governance proof snapshot JSON.
+
   cargo run -- --distill-patterns
       Distill local-only successful and risky evolution patterns into memory/patterns/.
 
@@ -290,6 +326,27 @@ pub enum RuntimeCliCommand {
     ProofReport,
     ProofJson,
     Demo,
+    ApproveCandidate {
+        run_id: String,
+        reason: String,
+    },
+    RejectCandidate {
+        run_id: String,
+        reason: String,
+    },
+    DeferCandidate {
+        run_id: String,
+        reason: String,
+    },
+    ApprovalStatus(String),
+    ApprovalLog,
+    GovernanceStatus,
+    PromotionReadyApproved,
+    PromoteApproved(String),
+    ReleaseProposal,
+    ReleaseProposalJson,
+    ProofSnapshot,
+    ProofSnapshotJson,
     DistillPatterns,
     RecombinePatterns,
     EvolveRecombined,
@@ -488,6 +545,27 @@ impl RuntimeCliCommand {
         if raw_args == ["--demo"] {
             return Ok(Self::Demo);
         }
+        if raw_args == ["--approval-log"] {
+            return Ok(Self::ApprovalLog);
+        }
+        if raw_args == ["--governance-status"] {
+            return Ok(Self::GovernanceStatus);
+        }
+        if raw_args == ["--promotion-ready-approved"] {
+            return Ok(Self::PromotionReadyApproved);
+        }
+        if raw_args == ["--release-proposal"] {
+            return Ok(Self::ReleaseProposal);
+        }
+        if raw_args == ["--release-proposal-json"] {
+            return Ok(Self::ReleaseProposalJson);
+        }
+        if raw_args == ["--proof-snapshot"] {
+            return Ok(Self::ProofSnapshot);
+        }
+        if raw_args == ["--proof-snapshot-json"] {
+            return Ok(Self::ProofSnapshotJson);
+        }
         if raw_args.len() == 2 && raw_args[0] == "--campaign-report" {
             return Ok(Self::CampaignReport(raw_args[1].clone()));
         }
@@ -505,6 +583,31 @@ impl RuntimeCliCommand {
         }
         if raw_args.len() == 2 && raw_args[0] == "--supervised-run-report" {
             return Ok(Self::SupervisedRunReport(raw_args[1].clone()));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--approval-status" {
+            return Ok(Self::ApprovalStatus(raw_args[1].clone()));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--promote-approved" {
+            return Ok(Self::PromoteApproved(raw_args[1].clone()));
+        }
+        if raw_args.len() == 4 && raw_args[0] == "--approve-candidate" && raw_args[2] == "--reason"
+        {
+            return Ok(Self::ApproveCandidate {
+                run_id: raw_args[1].clone(),
+                reason: raw_args[3].clone(),
+            });
+        }
+        if raw_args.len() == 4 && raw_args[0] == "--reject-candidate" && raw_args[2] == "--reason" {
+            return Ok(Self::RejectCandidate {
+                run_id: raw_args[1].clone(),
+                reason: raw_args[3].clone(),
+            });
+        }
+        if raw_args.len() == 4 && raw_args[0] == "--defer-candidate" && raw_args[2] == "--reason" {
+            return Ok(Self::DeferCandidate {
+                run_id: raw_args[1].clone(),
+                reason: raw_args[3].clone(),
+            });
         }
         if raw_args.len() == 3
             && raw_args[0] == "--supervise-task"

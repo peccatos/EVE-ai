@@ -1,22 +1,25 @@
 use eva_runtime_with_task_validator::{
-    adjust_task_from_campaign, autonomy_status, build_project_phase_runtime_output, candidate_diff,
-    candidate_lifecycle, default_corpus_contract, distill_patterns, fix_generated_test_names,
-    ingest_corpus, ingest_repo_patterns, latest_corpus_id, learning_summary, list_adjusted_tasks,
-    list_bounded_runs, list_candidates, list_corpora, list_suggested_tasks, list_supervised_runs,
-    load_corpus_summary, load_metrics, preview_campaign_recombination, print_benchmark,
-    print_bounded_run_report, print_campaign, print_campaign_report, print_eva_status,
-    print_evolution_policy, print_hygiene_plan, print_hygiene_report, print_last_bounded_run,
-    print_last_campaign_report, print_last_report, print_last_supervised_run,
-    print_last_task_adjustment, print_portfolio, print_promotion_queue, print_proof_json,
-    print_proof_report, print_quality_report, print_report, print_strategy_portfolio,
-    print_supervised_run_report, promote_candidate, promotion_blocked_items, promotion_ready_items,
+    adjust_task_from_campaign, approval_log, approval_status, approve_candidate, autonomy_status,
+    build_project_phase_runtime_output, candidate_diff, candidate_lifecycle,
+    default_corpus_contract, defer_candidate, distill_patterns, fix_generated_test_names,
+    governance_status, ingest_corpus, ingest_repo_patterns, latest_corpus_id, learning_summary,
+    list_adjusted_tasks, list_bounded_runs, list_candidates, list_corpora, list_suggested_tasks,
+    list_supervised_runs, load_corpus_summary, load_metrics, preview_campaign_recombination,
+    print_benchmark, print_bounded_run_report, print_campaign, print_campaign_report,
+    print_eva_status, print_evolution_policy, print_hygiene_plan, print_hygiene_report,
+    print_last_bounded_run, print_last_campaign_report, print_last_report,
+    print_last_supervised_run, print_last_task_adjustment, print_portfolio, print_promotion_queue,
+    print_proof_json, print_proof_report, print_proof_snapshot, print_proof_snapshot_json,
+    print_quality_report, print_release_proposal, print_release_proposal_json, print_report,
+    print_strategy_portfolio, print_supervised_run_report, promote_approved_candidate,
+    promote_candidate, promotion_blocked_items, promotion_ready_approved, promotion_ready_items,
     refresh_metrics, refresh_portfolio, refresh_promotion_queue, refresh_report,
-    refresh_strategy_portfolio, render_plans, render_recombined_hypotheses, replay_candidate,
-    review_candidate, run_benchmark, run_bounded_evolution, run_demo, run_evolution_cycle,
-    run_planned_cycles, run_planned_evolution_cycle, run_recombined_evolution_cycle,
-    run_repo_patch_report, run_stored_campaign, run_task_from_path, serve_runtime_daemon,
-    should_run_repo_patch_mode, suggest_strategy_tasks, supervise_task, CycleInput,
-    RepoPatchCliConfig, RuntimeCliCommand, RuntimeCycleRunner, RUNTIME_CLI_HELP,
+    refresh_strategy_portfolio, reject_candidate, render_plans, render_recombined_hypotheses,
+    replay_candidate, review_candidate, run_benchmark, run_bounded_evolution, run_demo,
+    run_evolution_cycle, run_planned_cycles, run_planned_evolution_cycle,
+    run_recombined_evolution_cycle, run_repo_patch_report, run_stored_campaign, run_task_from_path,
+    serve_runtime_daemon, should_run_repo_patch_mode, suggest_strategy_tasks, supervise_task,
+    CycleInput, RepoPatchCliConfig, RuntimeCliCommand, RuntimeCycleRunner, RUNTIME_CLI_HELP,
 };
 use serde::Deserialize;
 use std::fs;
@@ -669,6 +672,148 @@ fn main() {
                 Ok(output) => println!("{output}"),
                 Err(err) => {
                     eprintln!("demo_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ApproveCandidate { run_id, reason }) => {
+            match approve_candidate(".", "memory", &run_id, &reason) {
+                Ok(record) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&record).expect("serialize approval")
+                ),
+                Err(err) => {
+                    eprintln!("approve_candidate_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::RejectCandidate { run_id, reason }) => {
+            match reject_candidate(".", "memory", &run_id, &reason) {
+                Ok(record) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&record).expect("serialize rejection")
+                ),
+                Err(err) => {
+                    eprintln!("reject_candidate_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::DeferCandidate { run_id, reason }) => {
+            match defer_candidate(".", "memory", &run_id, &reason) {
+                Ok(record) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&record).expect("serialize defer")
+                ),
+                Err(err) => {
+                    eprintln!("defer_candidate_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ApprovalStatus(run_id)) => {
+            match approval_status(".", "memory", &run_id) {
+                Ok(status) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&status).expect("serialize approval status")
+                ),
+                Err(err) => {
+                    eprintln!("approval_status_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ApprovalLog) => {
+            match approval_log("memory") {
+                Ok(log) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&log).expect("serialize approval log")
+                ),
+                Err(err) => {
+                    eprintln!("approval_log_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::GovernanceStatus) => {
+            match governance_status(".", "memory") {
+                Ok(status) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&status).expect("serialize governance status")
+                ),
+                Err(err) => {
+                    eprintln!("governance_status_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::PromotionReadyApproved) => {
+            match promotion_ready_approved(".", "memory") {
+                Ok(items) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&items)
+                        .expect("serialize promotion ready approved")
+                ),
+                Err(err) => {
+                    eprintln!("promotion_ready_approved_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::PromoteApproved(run_id)) => {
+            match promote_approved_candidate(".", "memory", &run_id) {
+                Ok(status) => println!("{status}"),
+                Err(err) => {
+                    eprintln!("promote_approved_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ReleaseProposal) => {
+            match print_release_proposal(".", "memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("release_proposal_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ReleaseProposalJson) => {
+            match print_release_proposal_json(".", "memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("release_proposal_json_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ProofSnapshot) => {
+            match print_proof_snapshot(".", "memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("proof_snapshot_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ProofSnapshotJson) => {
+            match print_proof_snapshot_json(".", "memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("proof_snapshot_json_error: {err}");
                     std::process::exit(1);
                 }
             }

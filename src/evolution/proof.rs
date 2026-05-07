@@ -4,12 +4,14 @@ use std::path::Path;
 use crate::contracts::EvolutionLogEntry;
 use crate::contracts::ProofReport;
 use crate::evolution::{
-    latest_supervised_run_id, load_or_refresh_promotion_queue, memory, refresh_metrics,
+    governance_status, latest_proof_snapshot_id, latest_supervised_run_id,
+    load_or_refresh_promotion_queue, memory, print_proof_snapshot, refresh_metrics,
 };
 
 pub fn build_proof_report(project_root: &str, memory_root: &str) -> Result<ProofReport, String> {
     let _ = refresh_metrics(memory_root);
     let queue = load_or_refresh_promotion_queue(project_root, memory_root)?;
+    let governance = governance_status(project_root, memory_root)?;
     let summaries = memory::list_candidate_summaries(memory_root)?;
     let total_runs = total_run_count(memory_root)?;
     let promoted_candidates = promoted_count(memory_root)?;
@@ -36,7 +38,9 @@ pub fn build_proof_report(project_root: &str, memory_root: &str) -> Result<Proof
         replay_review_support: true,
         promotion_queue_support: true,
         supervised_task_support: true,
+        governance_runtime_support: true,
         auto_promote: false,
+        operator_approval_required: true,
         forbidden_target_preservation: true,
         total_runs,
         candidate_count: summaries.len(),
@@ -44,6 +48,9 @@ pub fn build_proof_report(project_root: &str, memory_root: &str) -> Result<Proof
         promoted_candidates,
         ready_candidates,
         blocked_candidates,
+        approved_count: governance.approved_count,
+        rejected_count: governance.rejected_count,
+        deferred_count: governance.deferred_count,
         latest_bounded_run_id: latest_id_from_dir(memory_root, "bounded_runs")?,
         latest_supervised_run_id: latest_supervised_run_id(memory_root)?,
     };
@@ -65,14 +72,18 @@ fn derived_generated_at(memory_root: &str, queue_generated_at: u64) -> Result<u6
 pub fn print_eva_status(project_root: &str, memory_root: &str) -> Result<String, String> {
     let proof = build_proof_report(project_root, memory_root)?;
     Ok(format!(
-        "eva_status: candidates={} ready={} blocked={} replay_passed={} promoted={} bounded_latest={} supervised_latest={} auto_promote={}",
+        "eva_status: candidates={} ready={} blocked={} replay_passed={} promoted={} approved={} rejected={} deferred={} bounded_latest={} supervised_latest={} proof_snapshot_latest={} auto_promote={}",
         proof.candidate_count,
         proof.ready_candidates,
         proof.blocked_candidates,
         proof.replay_passed_candidates,
         proof.promoted_candidates,
+        proof.approved_count,
+        proof.rejected_count,
+        proof.deferred_count,
         proof.latest_bounded_run_id.as_deref().unwrap_or("none"),
         proof.latest_supervised_run_id.as_deref().unwrap_or("none"),
+        latest_proof_snapshot_id(memory_root)?.as_deref().unwrap_or("none"),
         proof.auto_promote
     ))
 }
@@ -90,9 +101,20 @@ pub fn print_proof_json(project_root: &str, memory_root: &str) -> Result<String,
 
 pub fn run_demo(project_root: &str, memory_root: &str) -> Result<String, String> {
     let _ = load_or_refresh_promotion_queue(project_root, memory_root)?;
+    let governance = governance_status(project_root, memory_root)?;
     let status = print_eva_status(project_root, memory_root)?;
     let report = print_proof_report(project_root, memory_root)?;
-    Ok(format!("{status}\n\n{report}"))
+    let snapshot = print_proof_snapshot(project_root, memory_root)?;
+    Ok(format!(
+        "{status}\n\ngovernance_status: approved={} rejected={} deferred={} ready_approved={} auto_promote={}\n\n{}\n\n{}",
+        governance.approved_count,
+        governance.rejected_count,
+        governance.deferred_count,
+        governance.promotion_ready_approved_count,
+        governance.auto_promote,
+        report,
+        snapshot
+    ))
 }
 
 fn total_run_count(memory_root: &str) -> Result<u64, String> {
@@ -194,7 +216,7 @@ fn write_proof_report(memory_root: &str, proof: &ProofReport) -> Result<(), Stri
 
 fn render_proof_markdown(proof: &ProofReport) -> String {
     format!(
-        "# EVA Proof Report\n\nlocal_corpus_ingestion_support={}\nread_only_corpus_safety={}\ntask_suggestion_support={}\ncampaign_diagnostics_support={}\nzero_yield_task_adjustment_support={}\nbounded_campaign_loop_support={}\nrecombination_fallback_support={}\nreplay_review_support={}\npromotion_queue_support={}\nsupervised_task_support={}\nauto_promote={}\nforbidden_target_preservation={}\n\ntotal_runs={}\ncandidate_count={}\nreplay_passed_candidates={}\npromoted_candidates={}\nready_candidates={}\nblocked_candidates={}\nlatest_bounded_run_id={}\nlatest_supervised_run_id={}\n",
+        "# EVA Proof Report\n\nlocal_corpus_ingestion_support={}\nread_only_corpus_safety={}\ntask_suggestion_support={}\ncampaign_diagnostics_support={}\nzero_yield_task_adjustment_support={}\nbounded_campaign_loop_support={}\nrecombination_fallback_support={}\nreplay_review_support={}\npromotion_queue_support={}\nsupervised_task_support={}\ngovernance_runtime_support={}\nauto_promote={}\noperator_approval_required={}\nforbidden_target_preservation={}\n\ntotal_runs={}\ncandidate_count={}\nreplay_passed_candidates={}\npromoted_candidates={}\nready_candidates={}\nblocked_candidates={}\napproved_count={}\nrejected_count={}\ndeferred_count={}\nlatest_bounded_run_id={}\nlatest_supervised_run_id={}\n",
         proof.local_corpus_ingestion_support,
         proof.read_only_corpus_safety,
         proof.task_suggestion_support,
@@ -205,7 +227,9 @@ fn render_proof_markdown(proof: &ProofReport) -> String {
         proof.replay_review_support,
         proof.promotion_queue_support,
         proof.supervised_task_support,
+        proof.governance_runtime_support,
         proof.auto_promote,
+        proof.operator_approval_required,
         proof.forbidden_target_preservation,
         proof.total_runs,
         proof.candidate_count,
@@ -213,6 +237,9 @@ fn render_proof_markdown(proof: &ProofReport) -> String {
         proof.promoted_candidates,
         proof.ready_candidates,
         proof.blocked_candidates,
+        proof.approved_count,
+        proof.rejected_count,
+        proof.deferred_count,
         proof.latest_bounded_run_id.as_deref().unwrap_or("none"),
         proof.latest_supervised_run_id.as_deref().unwrap_or("none"),
     )

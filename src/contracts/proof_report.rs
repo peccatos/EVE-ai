@@ -25,7 +25,11 @@ pub struct ProofReport {
     #[serde(default)]
     pub supervised_task_support: bool,
     #[serde(default)]
+    pub governance_runtime_support: bool,
+    #[serde(default)]
     pub auto_promote: bool,
+    #[serde(default)]
+    pub operator_approval_required: bool,
     #[serde(default)]
     pub forbidden_target_preservation: bool,
     #[serde(default)]
@@ -40,6 +44,12 @@ pub struct ProofReport {
     pub ready_candidates: usize,
     #[serde(default)]
     pub blocked_candidates: usize,
+    #[serde(default)]
+    pub approved_count: usize,
+    #[serde(default)]
+    pub rejected_count: usize,
+    #[serde(default)]
+    pub deferred_count: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_bounded_run_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
