@@ -1,16 +1,17 @@
 use eva_runtime_with_task_validator::{
     autonomy_status, build_project_phase_runtime_output, candidate_diff, default_corpus_contract,
     distill_patterns, fix_generated_test_names, ingest_corpus, ingest_repo_patterns,
-    learning_summary, list_candidates, list_corpora, list_suggested_tasks, load_corpus_summary,
-    load_metrics, print_benchmark, print_campaign, print_evolution_policy, print_hygiene_plan,
-    print_hygiene_report, print_last_campaign_report, print_last_report, print_portfolio,
-    print_quality_report, print_report, print_strategy_portfolio, promote_candidate,
-    refresh_metrics, refresh_portfolio, refresh_report, refresh_strategy_portfolio, render_plans,
-    render_recombined_hypotheses, replay_candidate, review_candidate, run_benchmark,
-    run_evolution_cycle, run_planned_cycles, run_planned_evolution_cycle,
-    run_recombined_evolution_cycle, run_repo_patch_report, run_stored_campaign, run_task_from_path,
-    serve_runtime_daemon, should_run_repo_patch_mode, suggest_strategy_tasks, CycleInput,
-    RepoPatchCliConfig, RuntimeCliCommand, RuntimeCycleRunner, RUNTIME_CLI_HELP,
+    latest_corpus_id, learning_summary, list_candidates, list_corpora, list_suggested_tasks,
+    load_corpus_summary, load_metrics, print_benchmark, print_campaign, print_campaign_report,
+    print_evolution_policy, print_hygiene_plan, print_hygiene_report, print_last_campaign_report,
+    print_last_report, print_portfolio, print_quality_report, print_report,
+    print_strategy_portfolio, promote_candidate, refresh_metrics, refresh_portfolio,
+    refresh_report, refresh_strategy_portfolio, render_plans, render_recombined_hypotheses,
+    replay_candidate, review_candidate, run_benchmark, run_evolution_cycle, run_planned_cycles,
+    run_planned_evolution_cycle, run_recombined_evolution_cycle, run_repo_patch_report,
+    run_stored_campaign, run_task_from_path, serve_runtime_daemon, should_run_repo_patch_mode,
+    suggest_strategy_tasks, CycleInput, RepoPatchCliConfig, RuntimeCliCommand, RuntimeCycleRunner,
+    RUNTIME_CLI_HELP,
 };
 use serde::Deserialize;
 use std::fs;
@@ -262,7 +263,8 @@ fn main() {
             return;
         }
         Ok(RuntimeCliCommand::CorpusSummary(corpus_id)) => {
-            match load_corpus_summary("memory", &corpus_id) {
+            let resolved_id = resolve_corpus_alias("memory", &corpus_id);
+            match resolved_id.and_then(|resolved| load_corpus_summary("memory", &resolved)) {
                 Ok(summary) => println!(
                     "{}",
                     serde_json::to_string_pretty(&summary).expect("serialize corpus summary")
@@ -276,7 +278,7 @@ fn main() {
         }
         Ok(RuntimeCliCommand::ListCorpora) => {
             match list_corpora("memory") {
-                Ok(corpora) => println!("{}", corpora.join("\n")),
+                Ok(corpora) => println!("{}", render_corpora_listing("memory", &corpora)),
                 Err(err) => {
                     eprintln!("list_corpora_error: {err}");
                     std::process::exit(1);
@@ -285,7 +287,8 @@ fn main() {
             return;
         }
         Ok(RuntimeCliCommand::SuggestStrategyTasks(corpus_id)) => {
-            match suggest_strategy_tasks("memory", &corpus_id) {
+            let resolved_id = resolve_corpus_alias("memory", &corpus_id);
+            match resolved_id.and_then(|resolved| suggest_strategy_tasks("memory", &resolved)) {
                 Ok(tasks) => println!(
                     "{}",
                     serde_json::to_string_pretty(&tasks).expect("serialize suggested tasks")
@@ -413,6 +416,16 @@ fn main() {
             }
             return;
         }
+        Ok(RuntimeCliCommand::CampaignReport(campaign_id)) => {
+            match print_campaign_report("memory", &campaign_id) {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("campaign_report_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
         Ok(RuntimeCliCommand::DistillPatterns) => {
             match distill_patterns("memory") {
                 Ok(summary) => println!(
@@ -501,6 +514,32 @@ fn main() {
             std::process::exit(1);
         }
     }
+}
+
+fn resolve_corpus_alias(memory_root: &str, corpus_id: &str) -> Result<String, String> {
+    if corpus_id == "latest" {
+        latest_corpus_id(memory_root)
+    } else {
+        Ok(corpus_id.to_string())
+    }
+}
+
+fn render_corpora_listing(memory_root: &str, corpora: &[String]) -> String {
+    let mut lines = Vec::new();
+    for corpus_id in corpora {
+        if let Ok(summary) = load_corpus_summary(memory_root, corpus_id) {
+            lines.push(format!(
+                "{} root_path={} scanned_files={} detected_strategy_count={}",
+                summary.corpus_id,
+                summary.root_path,
+                summary.scanned_files,
+                summary.suggested_strategies.len()
+            ));
+        } else {
+            lines.push(corpus_id.clone());
+        }
+    }
+    lines.join("\n")
 }
 
 #[derive(Debug, Deserialize)]

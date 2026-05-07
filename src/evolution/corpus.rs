@@ -14,20 +14,39 @@ use crate::graph::{load_graph, write_graph};
 pub struct CorpusSummary {
     pub corpus_id: String,
     pub root_path: String,
+    #[serde(default)]
+    pub generated_at: u64,
+    #[serde(default)]
+    pub created_at: u64,
+    #[serde(default)]
     pub scanned_files: usize,
+    #[serde(default)]
     pub skipped_files: usize,
+    #[serde(default)]
     pub file_count: usize,
+    #[serde(default)]
     pub rust_file_count: usize,
+    #[serde(default)]
     pub test_file_count: usize,
+    #[serde(default)]
     pub function_count: usize,
+    #[serde(default)]
     pub test_function_count: usize,
+    #[serde(default)]
     pub result_returning_functions: usize,
+    #[serde(default)]
     pub error_enum_count: usize,
+    #[serde(default)]
     pub validation_function_count: usize,
+    #[serde(default)]
     pub cli_parser_mentions: usize,
+    #[serde(default)]
     pub reporting_mentions: usize,
+    #[serde(default)]
     pub module_names: Vec<String>,
+    #[serde(default)]
     pub suggested_strategies: Vec<String>,
+    #[serde(default)]
     pub safety_notes: Vec<String>,
 }
 
@@ -93,6 +112,8 @@ pub fn ingest_corpus(
     let mut summary = CorpusSummary {
         corpus_id: contract.corpus_id.clone(),
         root_path: contract.root_path.clone(),
+        generated_at: crate::evolution::memory::now_unix(),
+        created_at: contract.created_at,
         scanned_files: paths.len(),
         skipped_files,
         safety_notes: vec![
@@ -147,6 +168,10 @@ pub fn load_corpus_summary(memory_root: &str, corpus_id: &str) -> Result<CorpusS
     let path = Path::new(memory_root)
         .join("corpus")
         .join(format!("{corpus_id}.summary.json"));
+    load_corpus_summary_from_path(&path)
+}
+
+fn load_corpus_summary_from_path(path: &Path) -> Result<CorpusSummary, String> {
     let contents = fs::read_to_string(path)
         .map_err(|error| format!("failed to read corpus summary: {error}"))?;
     serde_json::from_str(&contents)
@@ -183,6 +208,54 @@ pub fn list_corpora(memory_root: &str) -> Result<Vec<String>, String> {
     ids.sort();
     ids.dedup();
     Ok(ids)
+}
+
+pub fn latest_corpus_id(memory_root: &str) -> Result<String, String> {
+    let dir = Path::new(memory_root).join("corpus");
+    if !dir.exists() {
+        return Err("no stored corpora available".to_string());
+    }
+    let mut summaries = fs::read_dir(&dir)
+        .map_err(|error| format!("failed to read corpus dir: {error}"))?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with(".summary.json"))
+        })
+        .filter_map(|path| {
+            let modified_at = path
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.modified().ok())
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|duration| duration.as_secs())
+                .unwrap_or(0);
+            load_corpus_summary_from_path(&path)
+                .ok()
+                .map(|summary| (summary, modified_at))
+        })
+        .collect::<Vec<_>>();
+    summaries.sort_by(|(left, left_modified_at), (right, right_modified_at)| {
+        effective_corpus_timestamp(right, *right_modified_at)
+            .cmp(&effective_corpus_timestamp(left, *left_modified_at))
+            .then_with(|| right.corpus_id.cmp(&left.corpus_id))
+    });
+    summaries
+        .first()
+        .map(|(summary, _)| summary.corpus_id.clone())
+        .ok_or_else(|| "no stored corpora available".to_string())
+}
+
+fn effective_corpus_timestamp(summary: &CorpusSummary, modified_at: u64) -> u64 {
+    if summary.generated_at != 0 {
+        summary.generated_at
+    } else if summary.created_at != 0 {
+        summary.created_at
+    } else {
+        modified_at
+    }
 }
 
 fn walk_corpus(

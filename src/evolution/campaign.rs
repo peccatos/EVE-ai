@@ -1,15 +1,17 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use crate::contracts::{EvolutionLogEntry, EvolutionStatus, TaskContract};
+use crate::contracts::{EvolutionLogEntry, EvolutionStatus, MutationKind, TaskContract};
 use crate::evolution::autonomy::autonomy_status;
 use crate::evolution::benchmark::count_sandbox_leaks;
 use crate::evolution::memory;
 use crate::evolution::task_validator::{
-    load_stored_task_contract, load_task_contract, store_task_contract, validate_task_contract,
+    load_stored_task_contract, load_task_contract, matches_target_patterns, store_task_contract,
+    validate_task_contract,
 };
+use crate::graph::analyzer::propose_mutation_plans;
 use crate::promotion::review::review_candidate;
 use crate::runtime::run_planned_evolution_cycle_for_task;
 
@@ -17,6 +19,12 @@ use crate::runtime::run_planned_evolution_cycle_for_task;
 pub struct EvolutionCampaign {
     pub campaign_id: String,
     pub task_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_corpus_id: Option<String>,
+    #[serde(default)]
+    pub source_task_id: String,
+    #[serde(default)]
+    pub corpus_derived: bool,
     pub total_cycles: u64,
     pub passed_cycles: u64,
     pub failed_cycles: u64,
@@ -36,12 +44,57 @@ pub struct EvolutionCampaign {
     pub finished_at: u64,
     pub blocker_counts: Vec<CampaignBlockerCount>,
     pub candidate_run_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zero_candidate_reason: Option<String>,
+    #[serde(default)]
+    pub rejected_plan_count: usize,
+    #[serde(default)]
+    pub duplicate_rejection_count: usize,
+    #[serde(default)]
+    pub below_score_count: usize,
+    #[serde(default)]
+    pub filtered_by_task_count: usize,
+    #[serde(default)]
+    pub no_valid_plan_count: usize,
+    #[serde(default)]
+    pub allowed_target_miss_count: usize,
+    #[serde(default)]
+    pub allowed_kind_miss_count: usize,
+    #[serde(default)]
+    pub already_promoted_count: usize,
+    #[serde(default)]
+    pub repeated_target_penalty_count: usize,
+    #[serde(default)]
+    pub generated_plan_count: usize,
+    #[serde(default)]
+    pub accepted_plan_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CampaignBlockerCount {
     pub blocker: String,
     pub count: u64,
+}
+
+#[derive(Debug, Clone, Default)]
+struct CycleDiagnostics {
+    generated_plan_count: usize,
+    accepted_plan_count: usize,
+    filtered_by_task_count: usize,
+    no_valid_plan_count: usize,
+    allowed_target_miss_count: usize,
+    allowed_kind_miss_count: usize,
+    repeated_target_penalty_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct CampaignFeedback {
+    task_id: String,
+    source_corpus_id: String,
+    last_campaign_id: String,
+    zero_candidate_reason: String,
+    recommended_adjustments: Vec<String>,
+    created_at: u64,
 }
 
 pub fn run_task_from_path(
@@ -66,10 +119,26 @@ pub fn run_stored_campaign(
 }
 
 pub fn print_last_campaign_report(memory_root: &str) -> Result<String, String> {
+    let campaign =
+        latest_campaign(memory_root)?.ok_or_else(|| "no campaign reports available".to_string())?;
+    print_campaign_report(memory_root, &campaign.campaign_id)
+}
+
+pub fn print_campaign_report(memory_root: &str, campaign_id: &str) -> Result<String, String> {
     let dir = Path::new(memory_root).join("campaigns");
-    let path =
-        latest_markdown_path(&dir)?.ok_or_else(|| "no campaign reports available".to_string())?;
-    fs::read_to_string(path).map_err(|error| format!("failed to read campaign report: {error}"))
+    let markdown_path = dir.join(format!("{campaign_id}.ru.md"));
+    if markdown_path.exists() {
+        return fs::read_to_string(markdown_path)
+            .map_err(|error| format!("failed to read campaign report: {error}"));
+    }
+
+    let campaign = load_campaign(memory_root, campaign_id)?
+        .ok_or_else(|| format!("campaign json not found for {campaign_id}"))?;
+    let task = load_stored_task_contract(memory_root, &campaign.task_id)
+        .map_err(|error| format!("campaign report missing and rebuild failed: {error}"))?;
+    write_campaign(memory_root, &task, &campaign)?;
+    fs::read_to_string(dir.join(format!("{campaign_id}.ru.md")))
+        .map_err(|error| format!("failed to read rebuilt campaign report: {error}"))
 }
 
 pub fn print_campaign(campaign: &EvolutionCampaign) -> String {
@@ -104,6 +173,9 @@ fn run_campaign(
     let mut campaign = EvolutionCampaign {
         campaign_id: campaign_id.clone(),
         task_id: task.task_id.clone(),
+        source_corpus_id: task.source_corpus_id.clone(),
+        source_task_id: task.task_id.clone(),
+        corpus_derived: task.source_corpus_id.is_some(),
         total_cycles: 0,
         passed_cycles: 0,
         failed_cycles: 0,
@@ -123,12 +195,61 @@ fn run_campaign(
         finished_at: started_at,
         blocker_counts: Vec::new(),
         candidate_run_ids: Vec::new(),
+        zero_candidate_reason: None,
+        rejected_plan_count: 0,
+        duplicate_rejection_count: 0,
+        below_score_count: 0,
+        filtered_by_task_count: 0,
+        no_valid_plan_count: 0,
+        allowed_target_miss_count: 0,
+        allowed_kind_miss_count: 0,
+        already_promoted_count: 0,
+        repeated_target_penalty_count: 0,
+        generated_plan_count: 0,
+        accepted_plan_count: 0,
     };
     let mut blocker_counts: BTreeMap<String, u64> = BTreeMap::new();
     let mut total_score = 0.0_f32;
 
     for _ in 0..task.cycles {
-        let _ = run_planned_evolution_cycle_for_task(project_root, memory_root, Some(task));
+        let diagnostics = collect_cycle_diagnostics(memory_root, task)?;
+        campaign.generated_plan_count += diagnostics.generated_plan_count;
+        campaign.accepted_plan_count += diagnostics.accepted_plan_count;
+        campaign.filtered_by_task_count += diagnostics.filtered_by_task_count;
+        campaign.no_valid_plan_count += diagnostics.no_valid_plan_count;
+        campaign.allowed_target_miss_count += diagnostics.allowed_target_miss_count;
+        campaign.allowed_kind_miss_count += diagnostics.allowed_kind_miss_count;
+        campaign.repeated_target_penalty_count += diagnostics.repeated_target_penalty_count;
+        if diagnostics.accepted_plan_count == 0 {
+            campaign.rejected_plan_count += diagnostics.generated_plan_count.max(1);
+        }
+
+        match run_planned_evolution_cycle_for_task(project_root, memory_root, Some(task)) {
+            Ok(()) => {}
+            Err(error) => {
+                if let Some(entry) = latest_log_entry(memory_root)? {
+                    if entry.duplicate_rejected {
+                        campaign.total_cycles += 1;
+                        total_score += entry.score;
+                        campaign.failed_cycles += 1;
+                        campaign.duplicate_rejections += 1;
+                        campaign.duplicate_rejection_count += 1;
+                        campaign.rejected_plan_count += 1;
+                        *blocker_counts
+                            .entry("duplicate_bad_mutation".to_string())
+                            .or_insert(0) += 1;
+                        continue;
+                    }
+                }
+                campaign.total_cycles += 1;
+                campaign.failed_cycles += 1;
+                *blocker_counts
+                    .entry(blocker_from_error(&error, &diagnostics))
+                    .or_insert(0) += 1;
+                continue;
+            }
+        }
+
         let entry = latest_log_entry(memory_root)?
             .ok_or_else(|| "campaign cycle completed without evolution log entry".to_string())?;
         campaign.total_cycles += 1;
@@ -141,40 +262,63 @@ fn run_campaign(
         }
         if entry.duplicate_rejected {
             campaign.duplicate_rejections += 1;
+            campaign.duplicate_rejection_count += 1;
+            campaign.rejected_plan_count += 1;
+            *blocker_counts
+                .entry("duplicate_bad_mutation".to_string())
+                .or_insert(0) += 1;
+            continue;
         }
         if is_forbidden_target(&entry.target_file) {
             campaign.forbidden_mutations += 1;
         }
         campaign.sandbox_leaks += count_sandbox_leaks(project_root)?;
 
-        if entry.useful_change && entry.status == EvolutionStatus::Candidate {
-            campaign.useful_candidates += 1;
-            campaign.candidate_run_ids.push(entry.run_id.clone());
-            if task.require_replay {
-                campaign.replay_attempted += 1;
-                let replay_result =
-                    crate::promotion::replay_candidate(project_root, memory_root, &entry.run_id);
-                let review = review_candidate(project_root, memory_root, &entry.run_id)?;
-                if replay_result.is_ok() && review.replay_status == "ok" {
-                    campaign.replay_passed += 1;
-                } else {
-                    campaign.replay_failed += 1;
-                }
-                if review.promotion_allowed {
-                    campaign.promotion_ready_candidates += 1;
-                }
-                for blocker in &review.promotion_blockers {
-                    *blocker_counts.entry(blocker.clone()).or_insert(0) += 1;
-                }
-            } else {
-                let review = review_candidate(project_root, memory_root, &entry.run_id)?;
-                if review.promotion_allowed {
-                    campaign.promotion_ready_candidates += 1;
-                }
-                for blocker in &review.promotion_blockers {
-                    *blocker_counts.entry(blocker.clone()).or_insert(0) += 1;
-                }
+        if !(entry.useful_change && entry.status == EvolutionStatus::Candidate) {
+            if entry.non_candidate_reason.is_some() {
+                campaign.rejected_plan_count += 1;
             }
+            continue;
+        }
+
+        if entry.score < task.min_score {
+            campaign.below_score_count += 1;
+            campaign.rejected_plan_count += 1;
+            *blocker_counts
+                .entry("below_min_score".to_string())
+                .or_insert(0) += 1;
+            continue;
+        }
+
+        let review = review_candidate(project_root, memory_root, &entry.run_id)?;
+        if task.require_replay {
+            campaign.replay_attempted += 1;
+            let replay_result =
+                crate::promotion::replay_candidate(project_root, memory_root, &entry.run_id);
+            if replay_result.is_ok() && review.replay_status == "ok" {
+                campaign.replay_passed += 1;
+            } else {
+                campaign.replay_failed += 1;
+            }
+        }
+
+        let already_promoted = review
+            .promotion_blockers
+            .iter()
+            .any(|blocker| blocker == "already_promoted");
+        for blocker in &review.promotion_blockers {
+            *blocker_counts.entry(blocker.clone()).or_insert(0) += 1;
+        }
+        if already_promoted {
+            campaign.already_promoted_count += 1;
+            campaign.rejected_plan_count += 1;
+            continue;
+        }
+
+        campaign.useful_candidates += 1;
+        campaign.candidate_run_ids.push(entry.run_id.clone());
+        if review.promotion_allowed {
+            campaign.promotion_ready_candidates += 1;
         }
     }
 
@@ -190,12 +334,25 @@ fn run_campaign(
     } else {
         total_score / campaign.total_cycles as f32
     };
+
+    if campaign.total_cycles > 0 && campaign.useful_candidates == 0 {
+        let reason = infer_zero_candidate_reason(&campaign);
+        campaign.zero_candidate_reason = Some(reason.clone());
+        *blocker_counts.entry(reason.clone()).or_insert(0) += 1;
+        if campaign.blocker_counts.is_empty() && blocker_counts.is_empty() {
+            *blocker_counts
+                .entry("unknown_zero_yield".to_string())
+                .or_insert(0) += 1;
+        }
+    }
+
     campaign.blocker_counts = blocker_counts
         .into_iter()
         .map(|(blocker, count)| CampaignBlockerCount { blocker, count })
         .collect();
 
     write_campaign(memory_root, task, &campaign)?;
+    maybe_write_feedback(memory_root, &campaign)?;
     Ok(campaign)
 }
 
@@ -237,15 +394,36 @@ fn render_campaign_markdown(task: &TaskContract, campaign: &EvolutionCampaign) -
             .collect::<Vec<_>>()
             .join(", ")
     };
+    let zero_reason = campaign
+        .zero_candidate_reason
+        .clone()
+        .unwrap_or_else(|| "none".to_string());
+    let diagnostics_recommendation = if campaign.useful_candidates == 0 {
+        [
+            "- loosen allowed_targets",
+            "- add another allowed mutation kind",
+            "- reduce min_score",
+            "- allow src/evolution/* for metrics/reporting tasks",
+            "- run --recombine-patterns before campaign",
+            "- inspect --evolution-policy",
+        ]
+        .join("\n")
+    } else {
+        "Кампания дала хотя бы один полезный кандидат, ограничения можно оставлять жёсткими."
+            .to_string()
+    };
     format!(
-        "# Campaign EVA\n\n## Цель задачи\n{}\n\n## Ограничения\ncycles={} max_risk={:.2} require_replay={} auto_promote={}\nallowed_targets={:?}\nallowed_kinds={:?}\n\n## Количество циклов\n{}\n\n## Найденные кандидаты\nПолезных кандидатов: {}\nГотовых к promotion-review: {}\n\n## Replay\nПопыток: {}\nПройдено: {}\nНе пройдено: {}\n\n## Причины отказа по кандидатам\n{}\n\n## Готовые к promotion кандидаты\n{}\n\n## Риски\nforbidden_mutations={} sandbox_leaks={} duplicate_rejections={}\n\n## Итог EVA\nЕва выполнила {} sandbox-циклов. Найдено {} полезных кандидата(ов), {} прошли replay. Promotion автоматически не выполнялся.\n\n## Рекомендация следующего шага\n{}",
+        "# Campaign EVA\n\n## Цель задачи\n{}\n\n## Ограничения\ncycles={} max_risk={:.2} min_score={:.2} require_replay={} auto_promote={}\nallowed_targets={:?}\nallowed_kinds={:?}\nsource_corpus_id={}\ncorpus_derived={}\n\n## Количество циклов\n{}\n\n## Найденные кандидаты\nПолезных кандидатов: {}\nГотовых к promotion-review: {}\n\n## Replay\nПопыток: {}\nПройдено: {}\nНе пройдено: {}\n\n## Причины отказа по кандидатам\n{}\n\n## Готовые к promotion кандидаты\n{}\n\n## Диагностика результата\nzero_candidate_reason={}\ngenerated_plan_count={}\naccepted_plan_count={}\nrejected_plan_count={}\nfiltered_by_task_count={}\nno_valid_plan_count={}\nallowed_target_miss_count={}\nallowed_kind_miss_count={}\nduplicate_rejection_count={}\nbelow_score_count={}\nalready_promoted_count={}\nrepeated_target_penalty_count={}\n\n## Риски\nforbidden_mutations={} sandbox_leaks={} duplicate_rejections={}\n\n## Итог EVA\nЕва выполнила {} sandbox-циклов. Найдено {} полезных кандидата(ов), {} прошли replay. Promotion автоматически не выполнялся.\n\n## Рекомендация следующего шага\n{}",
         task.goal_ru,
         task.cycles,
         task.max_risk,
+        task.min_score,
         task.require_replay,
         task.auto_promote,
         task.allowed_targets,
         task.allowed_mutation_kinds,
+        task.source_corpus_id.as_deref().unwrap_or("нет"),
+        campaign.corpus_derived,
         campaign.total_cycles,
         campaign.useful_candidates,
         campaign.promotion_ready_candidates,
@@ -254,18 +432,237 @@ fn render_campaign_markdown(task: &TaskContract, campaign: &EvolutionCampaign) -
         campaign.replay_failed,
         blockers,
         ready,
+        zero_reason,
+        campaign.generated_plan_count,
+        campaign.accepted_plan_count,
+        campaign.rejected_plan_count,
+        campaign.filtered_by_task_count,
+        campaign.no_valid_plan_count,
+        campaign.allowed_target_miss_count,
+        campaign.allowed_kind_miss_count,
+        campaign.duplicate_rejection_count,
+        campaign.below_score_count,
+        campaign.already_promoted_count,
+        campaign.repeated_target_penalty_count,
         campaign.forbidden_mutations,
         campaign.sandbox_leaks,
         campaign.duplicate_rejections,
         campaign.total_cycles,
         campaign.useful_candidates,
         campaign.replay_passed,
-        if campaign.promotion_ready_candidates > 0 {
-            "Рекомендуется вручную рассмотреть replay-подтверждённые кандидаты через --review-candidate."
-        } else {
-            "Нужно накопить replay-подтверждённые полезные кандидаты без критических blockers."
-        }
+        diagnostics_recommendation,
     )
+}
+
+fn collect_cycle_diagnostics(
+    memory_root: &str,
+    task: &TaskContract,
+) -> Result<CycleDiagnostics, String> {
+    let plans = propose_mutation_plans(memory_root)?;
+    if plans.is_empty() {
+        return Ok(CycleDiagnostics {
+            no_valid_plan_count: 1,
+            ..CycleDiagnostics::default()
+        });
+    }
+
+    let repeated_target_overused = repeated_target_overused(memory_root)?;
+    let mut diagnostics = CycleDiagnostics {
+        generated_plan_count: plans.len(),
+        ..CycleDiagnostics::default()
+    };
+    for plan in plans {
+        let target_allowed = task.allowed_targets.is_empty()
+            || matches_target_patterns(&plan.target_file, &task.allowed_targets);
+        let target_forbidden = matches_target_patterns(&plan.target_file, &task.forbidden_targets);
+        let objective_allowed = task.preferred_objectives.is_empty()
+            || task.preferred_objectives.contains(&plan.objective);
+        let kind_allowed = task.allowed_mutation_kinds.is_empty()
+            || task.allowed_mutation_kinds.contains(&plan.mutation_kind);
+        let risk_allowed = plan.estimated_risk <= task.max_risk;
+
+        if !target_allowed || target_forbidden {
+            diagnostics.allowed_target_miss_count += 1;
+        }
+        if !kind_allowed {
+            diagnostics.allowed_kind_miss_count += 1;
+        }
+        if !target_allowed
+            || target_forbidden
+            || !objective_allowed
+            || !kind_allowed
+            || !risk_allowed
+        {
+            diagnostics.filtered_by_task_count += 1;
+            continue;
+        }
+        if repeated_target_overused && plan.target_file == "tests/evolution_generated_tests.rs" {
+            diagnostics.repeated_target_penalty_count += 1;
+            continue;
+        }
+        diagnostics.accepted_plan_count += 1;
+    }
+    if diagnostics.accepted_plan_count == 0 {
+        diagnostics.no_valid_plan_count = 1;
+    }
+    Ok(diagnostics)
+}
+
+fn infer_zero_candidate_reason(campaign: &EvolutionCampaign) -> String {
+    if campaign.no_valid_plan_count > 0 && campaign.generated_plan_count == 0 {
+        return "no_valid_plan".to_string();
+    }
+    if campaign.allowed_target_miss_count > 0
+        && campaign.accepted_plan_count == 0
+        && campaign.allowed_target_miss_count >= campaign.allowed_kind_miss_count
+    {
+        return "allowed_targets_filtered_all".to_string();
+    }
+    if campaign.allowed_kind_miss_count > 0 && campaign.accepted_plan_count == 0 {
+        return "allowed_kinds_filtered_all".to_string();
+    }
+    if campaign.repeated_target_penalty_count > 0 && campaign.accepted_plan_count == 0 {
+        return "repeated_target_pressure_too_high".to_string();
+    }
+    if campaign.duplicate_rejection_count > 0 {
+        return "all_candidates_duplicate".to_string();
+    }
+    if campaign.below_score_count > 0 {
+        return "all_candidates_below_min_score".to_string();
+    }
+    if campaign.already_promoted_count > 0 {
+        return "all_candidates_already_promoted".to_string();
+    }
+    if campaign.filtered_by_task_count > 0 {
+        return "task_constraints_too_narrow".to_string();
+    }
+    if campaign.no_valid_plan_count > 0 {
+        return "no_valid_plan".to_string();
+    }
+    "unknown_zero_yield".to_string()
+}
+
+fn blocker_from_error(error: &str, diagnostics: &CycleDiagnostics) -> String {
+    if diagnostics.accepted_plan_count == 0 && diagnostics.allowed_target_miss_count > 0 {
+        "allowed_targets_filtered_all".to_string()
+    } else if diagnostics.accepted_plan_count == 0 && diagnostics.allowed_kind_miss_count > 0 {
+        "allowed_kinds_filtered_all".to_string()
+    } else if error.contains("no graph-guided plans available") {
+        "no_valid_plan".to_string()
+    } else {
+        "campaign_cycle_failed".to_string()
+    }
+}
+
+fn maybe_write_feedback(memory_root: &str, campaign: &EvolutionCampaign) -> Result<(), String> {
+    let Some(source_corpus_id) = campaign.source_corpus_id.clone() else {
+        return Ok(());
+    };
+    let Some(reason) = campaign.zero_candidate_reason.clone() else {
+        return Ok(());
+    };
+
+    let feedback = CampaignFeedback {
+        task_id: campaign.task_id.clone(),
+        source_corpus_id,
+        last_campaign_id: campaign.campaign_id.clone(),
+        zero_candidate_reason: reason.clone(),
+        recommended_adjustments: recommended_adjustments(&reason),
+        created_at: memory::now_unix(),
+    };
+    let path = Path::new(memory_root)
+        .join("tasks")
+        .join("feedback")
+        .join(format!("{}.json", campaign.task_id));
+    memory::write_json(path, &feedback)
+}
+
+fn recommended_adjustments(reason: &str) -> Vec<String> {
+    let mut values = vec![
+        "run --recombine-patterns before campaign".to_string(),
+        "inspect --evolution-policy".to_string(),
+    ];
+    match reason {
+        "allowed_targets_filtered_all" | "task_constraints_too_narrow" => {
+            values.insert(0, "loosen allowed_targets".to_string());
+            values.insert(
+                1,
+                "allow src/evolution/* for metrics/reporting tasks".to_string(),
+            );
+        }
+        "allowed_kinds_filtered_all" => {
+            values.insert(0, "add another allowed mutation kind".to_string());
+        }
+        "all_candidates_below_min_score" => {
+            values.insert(0, "reduce min_score".to_string());
+        }
+        "repeated_target_pressure_too_high" => {
+            values.insert(0, "loosen allowed_targets".to_string());
+            values.insert(1, "add another allowed mutation kind".to_string());
+        }
+        _ => {}
+    }
+    values
+}
+
+fn latest_campaign(memory_root: &str) -> Result<Option<EvolutionCampaign>, String> {
+    let dir = Path::new(memory_root).join("campaigns");
+    if !dir.exists() {
+        return Ok(None);
+    }
+    let mut campaigns = fs::read_dir(&dir)
+        .map_err(|error| format!("failed to read campaign directory: {error}"))?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "json")
+        })
+        .filter_map(|path| {
+            fs::read_to_string(path)
+                .ok()
+                .and_then(|contents| serde_json::from_str::<EvolutionCampaign>(&contents).ok())
+        })
+        .collect::<Vec<_>>();
+    campaigns.sort_by(|left, right| {
+        right
+            .finished_at
+            .cmp(&left.finished_at)
+            .then_with(|| right.started_at.cmp(&left.started_at))
+            .then_with(|| right.campaign_id.cmp(&left.campaign_id))
+    });
+    Ok(campaigns.into_iter().next())
+}
+
+fn load_campaign(
+    memory_root: &str,
+    campaign_id: &str,
+) -> Result<Option<EvolutionCampaign>, String> {
+    let path = Path::new(memory_root)
+        .join("campaigns")
+        .join(format!("{campaign_id}.json"));
+    if !path.exists() {
+        return Ok(None);
+    }
+    let contents = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read campaign json: {error}"))?;
+    let campaign = serde_json::from_str(&contents)
+        .map_err(|error| format!("failed to parse campaign json: {error}"))?;
+    Ok(Some(campaign))
+}
+
+fn repeated_target_overused(memory_root: &str) -> Result<bool, String> {
+    let mut summaries = memory::list_candidate_summaries(memory_root)?;
+    summaries.sort_by(|left, right| right.timestamp_unix.cmp(&left.timestamp_unix));
+    let recent = summaries.into_iter().take(10).collect::<Vec<_>>();
+    if recent.is_empty() {
+        return Ok(false);
+    }
+    let repeated = recent
+        .iter()
+        .filter(|summary| summary.target_file == "tests/evolution_generated_tests.rs")
+        .count();
+    Ok(repeated * 10 >= recent.len() * 6)
 }
 
 fn has_benchmark_history(memory_root: &str) -> Result<bool, String> {
@@ -282,20 +679,6 @@ fn has_benchmark_history(memory_root: &str) -> Result<bool, String> {
                 .extension()
                 .is_some_and(|extension| extension == "json")
         }))
-}
-
-fn latest_markdown_path(dir: &Path) -> Result<Option<PathBuf>, String> {
-    if !dir.exists() {
-        return Ok(None);
-    }
-    let mut candidates = fs::read_dir(dir)
-        .map_err(|error| format!("failed to read campaign directory: {error}"))?
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "md"))
-        .collect::<Vec<_>>();
-    candidates.sort();
-    Ok(candidates.pop())
 }
 
 fn latest_log_entry(memory_root: &str) -> Result<Option<EvolutionLogEntry>, String> {
@@ -336,4 +719,19 @@ fn is_forbidden_target(target_file: &str) -> bool {
         || target_file == "src/lib.rs"
         || target_file == "Cargo.toml"
         || target_file.ends_with("/Cargo.toml")
+}
+
+#[allow(dead_code)]
+fn _allowed_kind_name(kind: MutationKind) -> &'static str {
+    match kind {
+        MutationKind::AppendComment => "appendcomment",
+        MutationKind::ReplaceText => "replacetext",
+        MutationKind::ParameterTune => "parametertune",
+        MutationKind::AddTestSkeleton => "addtestskeleton",
+        MutationKind::AddMetricField => "addmetricfield",
+        MutationKind::AddUnitTest => "addunittest",
+        MutationKind::AddReplayAssertion => "addreplayassertion",
+        MutationKind::AddLearningSummaryField => "addlearningsummaryfield",
+        MutationKind::AddMetricUpdate => "addmetricupdate",
+    }
 }

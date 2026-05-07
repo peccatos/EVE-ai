@@ -33,14 +33,14 @@ pub use benchmark::{
     count_sandbox_leaks, print_benchmark, run_benchmark, run_planned_cycles, EvolutionBenchmark,
 };
 pub use campaign::{
-    print_campaign, print_last_campaign_report, run_stored_campaign, run_task_from_path,
-    EvolutionCampaign,
+    print_campaign, print_campaign_report, print_last_campaign_report, run_stored_campaign,
+    run_task_from_path, CampaignBlockerCount, EvolutionCampaign,
 };
 pub use classification::{
     classify_mutation_kind, classify_mutation_kind_label, mutation_class_label, MutationClass,
 };
 pub use corpus::{
-    default_corpus_contract, ingest_corpus, list_corpora, load_corpus_patterns,
+    default_corpus_contract, ingest_corpus, latest_corpus_id, list_corpora, load_corpus_patterns,
     load_corpus_summary, CorpusPatterns, CorpusSummary,
 };
 pub use corpus_validator::validate_corpus_contract;

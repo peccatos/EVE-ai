@@ -22,12 +22,18 @@ pub fn suggest_strategy_tasks(
             "test_expansion",
             "Локальное расширение тестового покрытия",
             "Усилить безопасные test/replay паттерны на основе локального corpus.",
-            vec!["tests/*".to_string()],
+            vec!["tests/*".to_string(), "src/evolution/*".to_string()],
             vec![
                 MutationObjective::ImproveTests,
                 MutationObjective::ImproveReplayability,
+                MutationObjective::ImproveGraphMemory,
             ],
-            vec![MutationKind::AddUnitTest, MutationKind::AddReplayAssertion],
+            vec![
+                MutationKind::AddUnitTest,
+                MutationKind::AddReplayAssertion,
+                MutationKind::AddLearningSummaryField,
+                MutationKind::AddMetricUpdate,
+            ],
             2,
             0.20,
             7.0,
@@ -129,7 +135,16 @@ pub fn list_suggested_tasks(memory_root: &str) -> Result<Vec<String>, String> {
         .collect::<Vec<_>>();
     ids.sort();
     ids.dedup();
-    Ok(ids)
+    let mut preferred = Vec::new();
+    for id in &ids {
+        if let Some(normalized) = normalize_legacy_task_id(id) {
+            if ids.iter().any(|candidate| candidate == &normalized) {
+                continue;
+            }
+        }
+        preferred.push(id.clone());
+    }
+    Ok(preferred)
 }
 
 fn build_task(
@@ -144,8 +159,9 @@ fn build_task(
     max_risk: f32,
     min_score: f32,
 ) -> TaskContract {
+    let normalized = normalized_corpus_task_id(corpus_id, suffix);
     TaskContract {
-        task_id: format!("corpus_{corpus_id}_{suffix}"),
+        task_id: normalized,
         title_ru: title_ru.to_string(),
         goal_ru: goal_ru.to_string(),
         allowed_targets,
@@ -173,6 +189,20 @@ fn build_task(
         source_corpus_id: Some(corpus_id.to_string()),
         created_at: crate::evolution::memory::now_unix(),
     }
+}
+
+fn normalized_corpus_task_id(corpus_id: &str, suffix: &str) -> String {
+    if corpus_id.starts_with("corpus_") {
+        format!("{corpus_id}_{suffix}")
+    } else {
+        format!("corpus_{corpus_id}_{suffix}")
+    }
+}
+
+fn normalize_legacy_task_id(task_id: &str) -> Option<String> {
+    task_id
+        .strip_prefix("corpus_corpus_")
+        .map(|rest| format!("corpus_{rest}"))
 }
 
 fn persist_task(memory_root: &str, task: &TaskContract) -> Result<(), String> {
