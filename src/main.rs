@@ -1,10 +1,11 @@
 use eva_runtime_with_task_validator::{
-    autonomy_status, build_project_phase_runtime_output, candidate_diff, default_corpus_contract,
-    distill_patterns, fix_generated_test_names, ingest_corpus, ingest_repo_patterns,
-    latest_corpus_id, learning_summary, list_candidates, list_corpora, list_suggested_tasks,
-    load_corpus_summary, load_metrics, print_benchmark, print_campaign, print_campaign_report,
-    print_evolution_policy, print_hygiene_plan, print_hygiene_report, print_last_campaign_report,
-    print_last_report, print_portfolio, print_quality_report, print_report,
+    adjust_task_from_campaign, autonomy_status, build_project_phase_runtime_output, candidate_diff,
+    default_corpus_contract, distill_patterns, fix_generated_test_names, ingest_corpus,
+    ingest_repo_patterns, latest_corpus_id, learning_summary, list_adjusted_tasks, list_candidates,
+    list_corpora, list_suggested_tasks, load_corpus_summary, load_metrics, print_benchmark,
+    print_campaign, print_campaign_report, print_evolution_policy, print_hygiene_plan,
+    print_hygiene_report, print_last_campaign_report, print_last_report,
+    print_last_task_adjustment, print_portfolio, print_quality_report, print_report,
     print_strategy_portfolio, promote_candidate, refresh_metrics, refresh_portfolio,
     refresh_report, refresh_strategy_portfolio, render_plans, render_recombined_hypotheses,
     replay_candidate, review_candidate, run_benchmark, run_evolution_cycle, run_planned_cycles,
@@ -421,6 +422,39 @@ fn main() {
                 Ok(report) => println!("{report}"),
                 Err(err) => {
                     eprintln!("campaign_report_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::AdjustTaskFromCampaign(campaign_id)) => {
+            match adjust_task_from_campaign("memory", &campaign_id) {
+                Ok(adjustment) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&adjustment).expect("serialize task adjustment")
+                ),
+                Err(err) => {
+                    eprintln!("adjust_task_from_campaign_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::LastTaskAdjustment) => {
+            match print_last_task_adjustment("memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("last_task_adjustment_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ListAdjustedTasks) => {
+            match list_adjusted_tasks("memory") {
+                Ok(tasks) => println!("{}", tasks.join("\n")),
+                Err(err) => {
+                    eprintln!("list_adjusted_tasks_error: {err}");
                     std::process::exit(1);
                 }
             }

@@ -6,6 +6,7 @@ pub mod mutation;
 pub mod mutation_plan;
 pub mod recombined_hypothesis;
 pub mod sandbox_result;
+pub mod task_adjustment;
 pub mod task_contract;
 pub mod validation;
 
@@ -17,4 +18,5 @@ pub use mutation::{MutationContract, MutationKind};
 pub use mutation_plan::{MutationObjective, MutationPlan};
 pub use recombined_hypothesis::RecombinedHypothesis;
 pub use sandbox_result::{CommandResult, SandboxResult};
+pub use task_adjustment::TaskAdjustment;
 pub use task_contract::{DeniedMutationKind, TaskContract};
