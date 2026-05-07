@@ -134,6 +134,15 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
   cargo run -- --campaign-report <CAMPAIGN_ID>
       Print or rebuild a specific Russian campaign report by campaign id.
 
+  cargo run -- --adjust-task-from-campaign <CAMPAIGN_ID>
+      Create a safe adjusted task draft from a zero-yield campaign.
+
+  cargo run -- --last-task-adjustment
+      Print the latest Russian task-adjustment report.
+
+  cargo run -- --list-adjusted-tasks
+      List stored adjusted task ids.
+
   cargo run -- --distill-patterns
       Distill local-only successful and risky evolution patterns into memory/patterns/.
 
@@ -200,6 +209,9 @@ pub enum RuntimeCliCommand {
     Campaign(String),
     LastCampaignReport,
     CampaignReport(String),
+    AdjustTaskFromCampaign(String),
+    LastTaskAdjustment,
+    ListAdjustedTasks,
     DistillPatterns,
     RecombinePatterns,
     EvolveRecombined,
@@ -356,8 +368,17 @@ impl RuntimeCliCommand {
         if raw_args == ["--last-campaign-report"] {
             return Ok(Self::LastCampaignReport);
         }
+        if raw_args == ["--last-task-adjustment"] {
+            return Ok(Self::LastTaskAdjustment);
+        }
+        if raw_args == ["--list-adjusted-tasks"] {
+            return Ok(Self::ListAdjustedTasks);
+        }
         if raw_args.len() == 2 && raw_args[0] == "--campaign-report" {
             return Ok(Self::CampaignReport(raw_args[1].clone()));
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--adjust-task-from-campaign" {
+            return Ok(Self::AdjustTaskFromCampaign(raw_args[1].clone()));
         }
         if raw_args == ["--distill-patterns"] {
             return Ok(Self::DistillPatterns);

@@ -25,6 +25,7 @@ pub mod strategy_portfolio;
 pub mod strategy_task_suggester;
 pub mod success_memory;
 pub mod task_validator;
+pub mod task_yield;
 pub mod templates;
 pub mod validator;
 
@@ -94,5 +95,6 @@ pub use task_validator::{
     load_stored_task_contract, load_task_contract, matches_target_patterns, store_task_contract,
     validate_task_contract,
 };
+pub use task_yield::{adjust_task_from_campaign, list_adjusted_tasks, print_last_task_adjustment};
 pub use templates::normalized_generated_test_name;
 pub use validator::validate_mutation;
