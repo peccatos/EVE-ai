@@ -7,6 +7,8 @@ use crate::evolution::memory::ReplayResult;
 use crate::evolution::{dedup, memory, regression_memory, success_memory};
 
 pub const DEFAULT_METRICS_PATH: &str = "memory/metrics.json";
+pub const EVA_REPORTS_DIR: &str = "memory/reports";
+pub const EVA_CANDIDATE_DIR: &str = "memory/candidates";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct EvolutionMetrics {
