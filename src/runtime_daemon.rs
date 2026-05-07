@@ -131,6 +131,9 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
   cargo run -- --last-campaign-report
       Print the latest Russian campaign report.
 
+  cargo run -- --campaign-report <CAMPAIGN_ID>
+      Print or rebuild a specific Russian campaign report by campaign id.
+
   cargo run -- --distill-patterns
       Distill local-only successful and risky evolution patterns into memory/patterns/.
 
@@ -196,6 +199,7 @@ pub enum RuntimeCliCommand {
     RunTask(String),
     Campaign(String),
     LastCampaignReport,
+    CampaignReport(String),
     DistillPatterns,
     RecombinePatterns,
     EvolveRecombined,
@@ -351,6 +355,9 @@ impl RuntimeCliCommand {
         }
         if raw_args == ["--last-campaign-report"] {
             return Ok(Self::LastCampaignReport);
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--campaign-report" {
+            return Ok(Self::CampaignReport(raw_args[1].clone()));
         }
         if raw_args == ["--distill-patterns"] {
             return Ok(Self::DistillPatterns);

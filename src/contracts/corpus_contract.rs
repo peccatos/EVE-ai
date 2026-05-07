@@ -14,5 +14,6 @@ pub struct CorpusIngestContract {
     pub extract_validation: bool,
     pub extract_cli: bool,
     pub extract_reporting: bool,
+    #[serde(default)]
     pub created_at: u64,
 }

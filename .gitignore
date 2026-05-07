@@ -40,3 +40,6 @@ memory/hygiene/
 # EVA corpus learning runtime state
 memory/corpus/
 memory/tasks/suggested/
+
+# EVA task feedback runtime state
+memory/tasks/feedback/
