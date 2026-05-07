@@ -21,6 +21,23 @@ use crate::runtime::{
     run_planned_evolution_cycle_for_task, run_recombined_evolution_cycle_for_hypothesis,
 };
 
+const DYNAMIC_REVIEW_BLOCKERS: &[&str] = &[
+    "already_promoted",
+    "appendcomment_cosmetic",
+    "autonomy_blocked",
+    "candidate_missing",
+    "duplicate_test_function_name",
+    "forbidden_target",
+    "mutation_missing",
+    "promotion_gate_blocked",
+    "quality_score_low",
+    "report_missing",
+    "replay_not_ok",
+    "score_below_threshold",
+    "target_already_contains_payload",
+    "useful_change_false",
+];
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EvolutionCampaign {
     pub campaign_id: String,
@@ -197,6 +214,92 @@ pub fn print_campaign_report(memory_root: &str, campaign_id: &str) -> Result<Str
 
 pub fn print_campaign(campaign: &EvolutionCampaign) -> String {
     serde_json::to_string_pretty(campaign).unwrap_or_else(|_| "{}".to_string())
+}
+
+pub(crate) fn reconcile_campaign_candidate_state(
+    project_root: &str,
+    memory_root: &str,
+    campaign_id: &str,
+) -> Result<EvolutionCampaign, String> {
+    let mut campaign = load_campaign(memory_root, campaign_id)?
+        .ok_or_else(|| format!("campaign json not found for {campaign_id}"))?;
+    if campaign.candidate_run_ids.is_empty() {
+        return Ok(campaign);
+    }
+
+    let task = load_stored_task_contract(memory_root, &campaign.task_id)?;
+    let preserved_rejected = campaign
+        .candidate_rejected_count
+        .saturating_sub(campaign.candidate_rejected_failed_replay)
+        .saturating_sub(campaign.candidate_rejected_already_promoted);
+    let preserved_blockers = campaign
+        .blocker_counts
+        .iter()
+        .filter(|item| !DYNAMIC_REVIEW_BLOCKERS.contains(&item.blocker.as_str()))
+        .map(|item| (item.blocker.clone(), item.count))
+        .collect::<BTreeMap<_, _>>();
+
+    let mut blocker_counts = preserved_blockers;
+    let mut replay_passed = 0_u64;
+    let mut replay_failed = 0_u64;
+    let mut promotion_ready_candidates = 0_u64;
+    let mut already_promoted_count = 0_usize;
+
+    for run_id in &campaign.candidate_run_ids {
+        let review = review_candidate(project_root, memory_root, run_id)?;
+        if review.replay_status == "ok" {
+            replay_passed += 1;
+        } else {
+            replay_failed += 1;
+        }
+        if review.promotion_allowed {
+            promotion_ready_candidates += 1;
+        }
+        let already_promoted = review
+            .promotion_blockers
+            .iter()
+            .any(|blocker| blocker == "already_promoted");
+        if already_promoted {
+            already_promoted_count += 1;
+        }
+        for blocker in &review.promotion_blockers {
+            *blocker_counts.entry(blocker.clone()).or_insert(0) += 1;
+        }
+    }
+
+    campaign.replay_attempted = if task.require_replay {
+        campaign.candidate_run_ids.len() as u64
+    } else {
+        0
+    };
+    campaign.replay_passed = replay_passed;
+    campaign.replay_failed = replay_failed;
+    campaign.promotion_ready_candidates = promotion_ready_candidates;
+    campaign.already_promoted_count = already_promoted_count;
+    campaign.candidate_rejected_failed_replay = replay_failed as usize;
+    campaign.candidate_rejected_already_promoted = already_promoted_count;
+    campaign.candidate_rejected_count = preserved_rejected
+        + campaign.candidate_rejected_failed_replay
+        + campaign.candidate_rejected_already_promoted;
+    campaign.candidate_recovery_reason =
+        if campaign.promotion_ready_candidates > 0 || campaign.useful_candidates > 0 {
+            if already_promoted_count > 0 {
+                Some("candidate_rejected_already_promoted".to_string())
+            } else if replay_failed > 0 {
+                Some("candidate_rejected_failed_replay".to_string())
+            } else {
+                None
+            }
+        } else {
+            campaign.candidate_recovery_reason.clone()
+        };
+    campaign.blocker_counts = blocker_counts
+        .into_iter()
+        .map(|(blocker, count)| CampaignBlockerCount { blocker, count })
+        .collect();
+
+    write_campaign(memory_root, &task, &campaign)?;
+    Ok(campaign)
 }
 
 fn run_campaign(

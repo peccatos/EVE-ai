@@ -11,6 +11,7 @@ use eva_runtime_with_task_validator::{
     TaskContract,
 };
 use eva_runtime_with_task_validator::{DeniedMutationKind, EvolutionGraph};
+use serde_json::Value;
 
 #[test]
 fn campaign_recombination_bridge_accepts_task_compatible_hypothesis() {
@@ -254,6 +255,49 @@ fn evolve_bounded_stops_on_promotion_ready_candidate_and_respects_max_cycles() {
     assert!(bounded.executed_cycles <= 10);
     assert!(!bounded.promotion_ready_run_ids.is_empty());
     assert!(bounded.stopped_early);
+
+    fs::remove_dir_all(root).expect("cleanup");
+}
+
+#[test]
+fn bounded_run_reconciles_campaign_report_after_replay_review_recovery() {
+    let root = temp_runtime_root("phase60-report-consistency");
+    seed_autonomy_memory(&root);
+    seed_recombination_graph(&root);
+    let task = replay_task("phase60_report_consistency");
+    let path = write_task_file(&root, &task);
+
+    let bounded = run_bounded_evolution(
+        root.to_str().unwrap(),
+        root.join("memory").to_str().unwrap(),
+        path.to_str().unwrap(),
+        2,
+    )
+    .expect("bounded");
+    let campaign_id = bounded.campaign_ids.first().expect("campaign id");
+    let report = fs::read_to_string(
+        root.join("memory/campaigns")
+            .join(format!("{campaign_id}.ru.md")),
+    )
+    .expect("campaign report");
+    let campaign_json = fs::read_to_string(
+        root.join("memory/campaigns")
+            .join(format!("{campaign_id}.json")),
+    )
+    .expect("campaign json");
+    let campaign: Value = serde_json::from_str(&campaign_json).expect("campaign parse");
+
+    assert!(!report.contains("replay_not_ok"));
+    assert!(report.contains("Не пройдено: 0"));
+    assert_eq!(campaign["replay_failed"].as_u64(), Some(0));
+    assert_eq!(
+        campaign["candidate_rejected_failed_replay"].as_u64(),
+        Some(0)
+    );
+    assert!(
+        campaign["promotion_ready_candidates"].as_u64().unwrap_or(0) > 0,
+        "campaign json={campaign_json}"
+    );
 
     fs::remove_dir_all(root).expect("cleanup");
 }

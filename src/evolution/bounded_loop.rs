@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+use crate::evolution::campaign::reconcile_campaign_candidate_state;
 use crate::evolution::{
     adjust_task_from_campaign, autonomy_status, print_evolution_policy, refresh_evolution_policy,
     refresh_portfolio, refresh_strategy_portfolio, update_policy_feedback, validate_task_contract,
@@ -115,6 +116,13 @@ pub fn run_bounded_evolution(
             if review.promotion_allowed {
                 summary.promotion_ready_run_ids.push(run_id.clone());
             }
+        }
+        if !campaign.candidate_run_ids.is_empty() {
+            let _ = reconcile_campaign_candidate_state(
+                project_root,
+                memory_root,
+                &campaign.campaign_id,
+            );
         }
         let _ = update_policy_feedback(memory_root, &campaign);
 
