@@ -185,7 +185,10 @@ fn future_phase_registry_is_static_and_non_executing() {
     assert!(first.contains("allowed_now=false"));
     assert!(first.contains("completed_by_phase_13_0x"));
     assert!(first.contains("Controlled Self-Modification Review Runtime"));
-    assert!(first.contains("Phase 14.0"));
+    assert!(first.contains("Phase 14.0: Trust + Workspace Recovery Gate"));
+    assert!(first.contains("completed_by_phase_14_0x"));
+    assert!(first.contains("Phase 15.0: EVA Runtime v1.0 Candidate"));
+    assert!(!first.contains("Stable Local Release Candidate Flow"));
 }
 
 #[test]

@@ -4,6 +4,7 @@ pub mod benchmark;
 pub mod bounded_loop;
 pub mod campaign;
 pub mod campaign_recombination;
+pub mod capability_policy;
 pub mod changelog;
 pub mod ci_pr;
 pub mod classification;
@@ -11,6 +12,7 @@ pub mod corpus;
 pub mod corpus_validator;
 pub mod dedup;
 pub mod determinism_audit;
+pub mod evidence_bundle;
 pub mod evolution_policy;
 pub mod external_patch;
 pub mod future_phase;
@@ -30,11 +32,13 @@ pub mod operator_runbook;
 pub mod patterns;
 pub mod policy_feedback;
 pub mod preflight_gate;
+pub mod preflight_gate_v3;
 pub mod promotion_queue;
 pub mod proof;
 pub mod proof_snapshot;
 pub mod quality;
 pub mod recombination;
+pub mod recovery_manifest;
 pub mod regression_memory;
 pub mod release_bundle;
 pub mod release_health;
@@ -52,7 +56,10 @@ pub mod supervisor;
 pub mod task_validator;
 pub mod task_yield;
 pub mod templates;
+pub mod trust_decision;
+pub mod trust_proof_report;
 pub mod validator;
+pub mod workspace_snapshot;
 
 pub use artifact_audit::{build_artifact_audit, print_artifact_audit, print_artifact_audit_json};
 pub use autonomy::{autonomy_status, AutonomyStatus};
@@ -72,6 +79,7 @@ pub use campaign_recombination::{
     select_task_compatible_hypothesis, CampaignRecombinationDiagnostics,
     CampaignRecombinationPreview,
 };
+pub use capability_policy::{build_capability_policy, print_capability_policy};
 pub use ci_pr::{build_pr_package, list_pr_packages, print_last_pr_package};
 pub use classification::{
     classify_mutation_kind, classify_mutation_kind_label, mutation_class_label, MutationClass,
@@ -87,6 +95,10 @@ pub use dedup::{
 };
 pub use determinism_audit::{
     build_determinism_audit, print_determinism_audit, print_determinism_audit_json,
+};
+pub use evidence_bundle::{
+    build_evidence_bundle, latest_evidence_bundle_id, list_evidence_bundles,
+    print_last_evidence_bundle,
 };
 pub use evolution_policy::{
     load_or_refresh_evolution_policy, print_evolution_policy, refresh_evolution_policy,
@@ -130,6 +142,7 @@ pub use operator_runbook::print_operator_runbook;
 pub use patterns::{distill_patterns, DistilledPatternSummary};
 pub use policy_feedback::{load_policy_feedback, update_policy_feedback, PolicyFeedback};
 pub use preflight_gate::{build_preflight_gate, print_preflight_gate, print_preflight_gate_json};
+pub use preflight_gate_v3::{build_preflight_gate_v3, print_preflight_gate_v3};
 pub use promotion_queue::{
     candidate_lifecycle, load_or_refresh_promotion_queue, load_promotion_queue,
     print_promotion_queue, promotion_blocked_items, promotion_ready_items, refresh_promotion_queue,
@@ -145,6 +158,10 @@ pub use quality::{
 };
 pub use recombination::{
     load_recombined_hypotheses, render_recombined_hypotheses, top_recombined_hypothesis,
+};
+pub use recovery_manifest::{
+    build_recovery_manifest, latest_recovery_manifest_id, list_recovery_manifests,
+    print_last_recovery_manifest,
 };
 pub use regression_memory::{load_regressions, record_regression, RegressionEntry};
 pub use release_bundle::{
@@ -186,4 +203,10 @@ pub use task_validator::{
 };
 pub use task_yield::{adjust_task_from_campaign, list_adjusted_tasks, print_last_task_adjustment};
 pub use templates::normalized_generated_test_name;
+pub use trust_decision::{build_trust_decision, print_trust_decision};
+pub use trust_proof_report::{build_trust_proof_report, print_trust_proof_report};
 pub use validator::validate_mutation;
+pub use workspace_snapshot::{
+    build_workspace_snapshot, latest_workspace_snapshot_id, list_workspace_snapshots,
+    print_last_workspace_snapshot,
+};

@@ -1,8 +1,9 @@
 use crate::contracts::OperatorConsoleReport;
 use crate::evolution::{
-    build_artifact_audit, build_determinism_audit, build_future_phase_registry,
-    build_operations_report, build_preflight_gate, build_release_health, governance_status, memory,
-    print_eva_status, print_operator_runbook, print_release_status,
+    build_artifact_audit, build_capability_policy, build_determinism_audit,
+    build_future_phase_registry, build_operations_report, build_preflight_gate,
+    build_preflight_gate_v3, build_release_health, build_trust_decision, build_workspace_snapshot,
+    governance_status, memory, print_eva_status, print_operator_runbook, print_release_status,
 };
 
 pub fn build_operator_console_report(
@@ -17,6 +18,10 @@ pub fn build_operator_console_report(
     let determinism = build_determinism_audit(project_root, memory_root)?;
     let operations = build_operations_report(project_root, memory_root)?;
     let future = build_future_phase_registry();
+    let policy = build_capability_policy();
+    let trust = build_trust_decision(project_root, memory_root)?;
+    let snapshot = build_workspace_snapshot(project_root, memory_root)?;
+    let gate_v3 = build_preflight_gate_v3(project_root, memory_root)?;
     Ok(OperatorConsoleReport {
         generated_at: memory::now_unix(),
         status_lines: vec![
@@ -49,6 +54,22 @@ pub fn build_operator_console_report(
                 operations.next_safe_operator_action, operations.future_phases_allowed_now
             ),
             format!(
+                "capability_policy: denied={} allowed={}",
+                policy.denied_capabilities.len(),
+                policy.allowed_capabilities.len()
+            ),
+            format!(
+                "trust_decision: decision={} blockers={} warnings={}",
+                trust.trust_decision,
+                trust.blockers.len(),
+                trust.warnings.len()
+            ),
+            format!(
+                "workspace_snapshot: id={} modified={} untracked={}",
+                snapshot.snapshot_id, snapshot.modified_count, snapshot.untracked_count
+            ),
+            format!("preflight_gate_v3: status={}", gate_v3.status),
+            format!(
                 "future_phases: {}",
                 future
                     .entries
@@ -59,7 +80,12 @@ pub fn build_operator_console_report(
             ),
         ],
         next_commands: vec![
-            operations.next_safe_operator_action,
+            if gate_v3.status == "pass" {
+                "cargo run -- --trust-proof-report".to_string()
+            } else {
+                operations.next_safe_operator_action
+            },
+            "cargo run -- --preflight-gate-v3".to_string(),
             "cargo run -- --proof-report".to_string(),
             "cargo run -- --operator-runbook".to_string(),
         ],

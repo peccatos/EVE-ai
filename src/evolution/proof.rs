@@ -4,11 +4,11 @@ use std::path::Path;
 use crate::contracts::EvolutionLogEntry;
 use crate::contracts::ProofReport;
 use crate::evolution::{
-    build_operations_report, build_preflight_gate, build_release_health, governance_status,
-    latest_proof_snapshot_id, latest_release_id, latest_supervised_run_id,
-    load_or_refresh_promotion_queue, memory, print_artifact_audit, print_operator_console,
-    print_operator_runbook, print_proof_snapshot, print_release_status, refresh_metrics,
-    release_count, release_ledger_count,
+    build_operations_report, build_preflight_gate, build_preflight_gate_v3, build_release_health,
+    build_trust_decision, governance_status, latest_proof_snapshot_id, latest_release_id,
+    latest_supervised_run_id, load_or_refresh_promotion_queue, memory, print_artifact_audit,
+    print_operator_console, print_operator_runbook, print_proof_snapshot, print_release_status,
+    print_trust_proof_report, refresh_metrics, release_count, release_ledger_count,
 };
 
 pub fn build_proof_report(project_root: &str, memory_root: &str) -> Result<ProofReport, String> {
@@ -55,6 +55,13 @@ pub fn build_proof_report(project_root: &str, memory_root: &str) -> Result<Proof
         external_patch_package_support: true,
         self_review_package_support: true,
         operator_console_support: true,
+        capability_policy_support: true,
+        trust_decision_support: true,
+        evidence_bundle_support: true,
+        workspace_snapshot_support: true,
+        recovery_manifest_support: true,
+        preflight_gate_v3_support: true,
+        trust_proof_report_support: true,
         auto_promote: false,
         operator_approval_required: true,
         forbidden_target_preservation: true,
@@ -133,8 +140,11 @@ pub fn run_demo(project_root: &str, memory_root: &str) -> Result<String, String>
     let runbook = print_operator_runbook(project_root, memory_root)?;
     let operations = build_operations_report(project_root, memory_root)?;
     let console = print_operator_console(project_root, memory_root)?;
+    let trust = build_trust_decision(project_root, memory_root)?;
+    let gate_v3 = build_preflight_gate_v3(project_root, memory_root)?;
+    let trust_report = print_trust_proof_report(project_root, memory_root)?;
     Ok(format!(
-        "{status}\n\ngovernance_status: approved={} rejected={} deferred={} ready_approved={} auto_promote={}\n\nrelease_status: {}\nrelease_health: grade={} score={}\npreflight_gate: status={}\noperations_status: next={} future_allowed_now={}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}",
+        "{status}\n\ngovernance_status: approved={} rejected={} deferred={} ready_approved={} auto_promote={}\n\nrelease_status: {}\nrelease_health: grade={} score={}\npreflight_gate: status={}\noperations_status: next={} future_allowed_now={}\ntrust_decision: {}\npreflight_gate_v3: status={}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}",
         governance.approved_count,
         governance.rejected_count,
         governance.deferred_count,
@@ -146,9 +156,12 @@ pub fn run_demo(project_root: &str, memory_root: &str) -> Result<String, String>
         gate.gate_status,
         operations.next_safe_operator_action,
         operations.future_phases_allowed_now,
+        trust.trust_decision,
+        gate_v3.status,
         artifact,
         runbook,
         console,
+        trust_report,
         report,
         snapshot
     ))
@@ -253,7 +266,7 @@ fn write_proof_report(memory_root: &str, proof: &ProofReport) -> Result<(), Stri
 
 fn render_proof_markdown(proof: &ProofReport) -> String {
     format!(
-        "# EVA Proof Report\n\nlocal_corpus_ingestion_support={}\nread_only_corpus_safety={}\ntask_suggestion_support={}\ncampaign_diagnostics_support={}\nzero_yield_task_adjustment_support={}\nbounded_campaign_loop_support={}\nrecombination_fallback_support={}\nreplay_review_support={}\npromotion_queue_support={}\nsupervised_task_support={}\ngovernance_runtime_support={}\nrelease_runtime_support={}\nrelease_health_support={}\nartifact_audit_support={}\ndeterminism_audit_support={}\npreflight_gate_v2_support={}\nrelease_ledger_support={}\nfuture_phase_registry_support={}\noperator_runbook_support={}\noperations_runtime_support={}\npr_package_support={}\nexternal_patch_package_support={}\nself_review_package_support={}\noperator_console_support={}\nauto_promote={}\noperator_approval_required={}\nforbidden_target_preservation={}\n\ntotal_runs={}\ncandidate_count={}\nreplay_passed_candidates={}\npromoted_candidates={}\nready_candidates={}\nblocked_candidates={}\napproved_count={}\nrejected_count={}\ndeferred_count={}\nrelease_count={}\nrelease_ledger_count={}\nlatest_release_id={}\nlatest_bounded_run_id={}\nlatest_supervised_run_id={}\n",
+        "# EVA Proof Report\n\nlocal_corpus_ingestion_support={}\nread_only_corpus_safety={}\ntask_suggestion_support={}\ncampaign_diagnostics_support={}\nzero_yield_task_adjustment_support={}\nbounded_campaign_loop_support={}\nrecombination_fallback_support={}\nreplay_review_support={}\npromotion_queue_support={}\nsupervised_task_support={}\ngovernance_runtime_support={}\nrelease_runtime_support={}\nrelease_health_support={}\nartifact_audit_support={}\ndeterminism_audit_support={}\npreflight_gate_v2_support={}\nrelease_ledger_support={}\nfuture_phase_registry_support={}\noperator_runbook_support={}\noperations_runtime_support={}\npr_package_support={}\nexternal_patch_package_support={}\nself_review_package_support={}\noperator_console_support={}\ncapability_policy_support={}\ntrust_decision_support={}\nevidence_bundle_support={}\nworkspace_snapshot_support={}\nrecovery_manifest_support={}\npreflight_gate_v3_support={}\ntrust_proof_report_support={}\nauto_promote={}\noperator_approval_required={}\nforbidden_target_preservation={}\n\ntotal_runs={}\ncandidate_count={}\nreplay_passed_candidates={}\npromoted_candidates={}\nready_candidates={}\nblocked_candidates={}\napproved_count={}\nrejected_count={}\ndeferred_count={}\nrelease_count={}\nrelease_ledger_count={}\nlatest_release_id={}\nlatest_bounded_run_id={}\nlatest_supervised_run_id={}\n",
         proof.local_corpus_ingestion_support,
         proof.read_only_corpus_safety,
         proof.task_suggestion_support,
@@ -278,6 +291,13 @@ fn render_proof_markdown(proof: &ProofReport) -> String {
         proof.external_patch_package_support,
         proof.self_review_package_support,
         proof.operator_console_support,
+        proof.capability_policy_support,
+        proof.trust_decision_support,
+        proof.evidence_bundle_support,
+        proof.workspace_snapshot_support,
+        proof.recovery_manifest_support,
+        proof.preflight_gate_v3_support,
+        proof.trust_proof_report_support,
         proof.auto_promote,
         proof.operator_approval_required,
         proof.forbidden_target_preservation,

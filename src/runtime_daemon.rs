@@ -335,6 +335,45 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
   cargo run -- --operator-console
       Print the combined operator console.
 
+  cargo run -- --capability-policy
+      Print deterministic capability policy JSON.
+
+  cargo run -- --trust-decision
+      Print deterministic trust decision JSON.
+
+  cargo run -- --workspace-snapshot
+      Build and print a metadata-only workspace snapshot.
+
+  cargo run -- --last-workspace-snapshot
+      Print the latest workspace snapshot JSON.
+
+  cargo run -- --list-workspace-snapshots
+      List stored workspace snapshot ids.
+
+  cargo run -- --evidence-bundle
+      Build and print a metadata-only evidence bundle.
+
+  cargo run -- --last-evidence-bundle
+      Print the latest evidence bundle JSON.
+
+  cargo run -- --list-evidence-bundles
+      List stored evidence bundle ids.
+
+  cargo run -- --recovery-manifest
+      Build and print a metadata-only recovery manifest.
+
+  cargo run -- --last-recovery-manifest
+      Print the latest recovery manifest JSON.
+
+  cargo run -- --list-recovery-manifests
+      List stored recovery manifest ids.
+
+  cargo run -- --preflight-gate-v3
+      Print composed trust/recovery preflight gate v3.
+
+  cargo run -- --trust-proof-report
+      Print unified Phase 14 trust proof report.
+
   cargo run -- --distill-patterns
       Distill local-only successful and risky evolution patterns into memory/patterns/.
 
@@ -479,6 +518,19 @@ pub enum RuntimeCliCommand {
     LastSelfReviewPackage,
     ListSelfReviewPackages,
     OperatorConsole,
+    CapabilityPolicy,
+    TrustDecision,
+    WorkspaceSnapshot,
+    LastWorkspaceSnapshot,
+    ListWorkspaceSnapshots,
+    EvidenceBundle,
+    LastEvidenceBundle,
+    ListEvidenceBundles,
+    RecoveryManifest,
+    LastRecoveryManifest,
+    ListRecoveryManifests,
+    PreflightGateV3,
+    TrustProofReport,
     ReleaseProposal,
     ReleaseProposalJson,
     ProofSnapshot,
@@ -776,6 +828,45 @@ impl RuntimeCliCommand {
         }
         if raw_args == ["--operator-console"] {
             return Ok(Self::OperatorConsole);
+        }
+        if raw_args == ["--capability-policy"] {
+            return Ok(Self::CapabilityPolicy);
+        }
+        if raw_args == ["--trust-decision"] {
+            return Ok(Self::TrustDecision);
+        }
+        if raw_args == ["--workspace-snapshot"] {
+            return Ok(Self::WorkspaceSnapshot);
+        }
+        if raw_args == ["--last-workspace-snapshot"] {
+            return Ok(Self::LastWorkspaceSnapshot);
+        }
+        if raw_args == ["--list-workspace-snapshots"] {
+            return Ok(Self::ListWorkspaceSnapshots);
+        }
+        if raw_args == ["--evidence-bundle"] {
+            return Ok(Self::EvidenceBundle);
+        }
+        if raw_args == ["--last-evidence-bundle"] {
+            return Ok(Self::LastEvidenceBundle);
+        }
+        if raw_args == ["--list-evidence-bundles"] {
+            return Ok(Self::ListEvidenceBundles);
+        }
+        if raw_args == ["--recovery-manifest"] {
+            return Ok(Self::RecoveryManifest);
+        }
+        if raw_args == ["--last-recovery-manifest"] {
+            return Ok(Self::LastRecoveryManifest);
+        }
+        if raw_args == ["--list-recovery-manifests"] {
+            return Ok(Self::ListRecoveryManifests);
+        }
+        if raw_args == ["--preflight-gate-v3"] {
+            return Ok(Self::PreflightGateV3);
+        }
+        if raw_args == ["--trust-proof-report"] {
+            return Ok(Self::TrustProofReport);
         }
         if raw_args == ["--release-proposal"] {
             return Ok(Self::ReleaseProposal);

@@ -253,11 +253,18 @@ fn future_phase_registry_no_longer_reports_old_phases_as_independently_planned()
     assert!(output.contains(
         "Phase 13.0: Controlled Self-Modification Review Runtime status=completed_by_phase_13_0x"
     ));
-    assert!(output.contains("Phase 14.0: Stable Local Release Candidate Flow status=planned"));
+    assert!(output
+        .contains("Phase 14.0: Trust + Workspace Recovery Gate status=completed_by_phase_14_0x"));
+    assert!(output.contains("Phase 15.0: EVA Runtime v1.0 Candidate status=planned"));
     assert!(!output.contains("Phase 10.0: CI/PR Integration Runtime status=planned"));
     assert!(
         !output.contains("Phase 13.0: Controlled Self-Modification Review Runtime status=planned")
     );
+    assert!(!output.contains("Stable Local Release Candidate Flow"));
+    assert!(!output.contains("Local CI Runner / Matrix Validation"));
+    assert!(!output.contains("External Repo Patch Dry-Run Runtime"));
+    assert!(!output.contains("Governance-backed PR Export"));
+    assert!(!output.contains("Controlled Daemon Mode"));
 }
 
 #[test]
