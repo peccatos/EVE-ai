@@ -1,17 +1,20 @@
 use eva_runtime_with_task_validator::{
     adjust_task_from_campaign, approval_log, approval_status, approve_candidate, autonomy_status,
-    build_project_phase_runtime_output, candidate_diff, candidate_lifecycle,
-    default_corpus_contract, defer_candidate, distill_patterns, fix_generated_test_names,
-    governance_status, ingest_corpus, ingest_repo_patterns, latest_corpus_id, learning_summary,
-    list_adjusted_tasks, list_bounded_runs, list_candidates, list_corpora, list_releases,
-    list_suggested_tasks, list_supervised_runs, load_corpus_summary, load_metrics,
-    preview_campaign_recombination, print_artifact_audit, print_artifact_audit_json,
-    print_benchmark, print_bounded_run_report, print_campaign, print_campaign_report,
-    print_determinism_audit, print_determinism_audit_json, print_eva_status,
-    print_evolution_policy, print_future_phases, print_future_phases_json, print_hygiene_plan,
-    print_hygiene_report, print_last_bounded_run, print_last_campaign_report, print_last_release,
-    print_last_report, print_last_supervised_run, print_last_task_adjustment,
-    print_operator_runbook, print_portfolio, print_preflight_gate, print_preflight_gate_json,
+    build_external_patch_package, build_pr_package, build_project_phase_runtime_output,
+    build_self_review_package, candidate_diff, candidate_lifecycle, default_corpus_contract,
+    defer_candidate, distill_patterns, fix_generated_test_names, governance_status, ingest_corpus,
+    ingest_repo_patterns, latest_corpus_id, learning_summary, list_adjusted_tasks,
+    list_bounded_runs, list_candidates, list_corpora, list_external_patch_packages,
+    list_pr_packages, list_releases, list_self_review_packages, list_suggested_tasks,
+    list_supervised_runs, load_corpus_summary, load_metrics, preview_campaign_recombination,
+    print_artifact_audit, print_artifact_audit_json, print_benchmark, print_bounded_run_report,
+    print_campaign, print_campaign_report, print_determinism_audit, print_determinism_audit_json,
+    print_eva_status, print_evolution_policy, print_future_phases, print_future_phases_json,
+    print_hygiene_plan, print_hygiene_report, print_last_bounded_run, print_last_campaign_report,
+    print_last_external_patch_package, print_last_pr_package, print_last_release,
+    print_last_report, print_last_self_review_package, print_last_supervised_run,
+    print_last_task_adjustment, print_operator_console, print_operator_runbook, print_ops_json,
+    print_ops_status, print_portfolio, print_preflight_gate, print_preflight_gate_json,
     print_promotion_queue, print_proof_json, print_proof_report, print_proof_snapshot,
     print_proof_snapshot_json, print_quality_report, print_record_release_attempt,
     print_release_bundle_json, print_release_changelog, print_release_health,
@@ -1035,6 +1038,136 @@ fn main() {
                 Ok(report) => println!("{report}"),
                 Err(err) => {
                     eprintln!("operator_runbook_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::OpsStatus) => {
+            match print_ops_status(".", "memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("ops_status_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::OpsJson) => {
+            match print_ops_json(".", "memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("ops_json_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::PrPackage) => {
+            match build_pr_package(".", "memory") {
+                Ok(report) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report).expect("serialize pr package")
+                ),
+                Err(err) => {
+                    eprintln!("pr_package_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::LastPrPackage) => {
+            match print_last_pr_package("memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("last_pr_package_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ListPrPackages) => {
+            match list_pr_packages("memory") {
+                Ok(items) => println!("{}", items.join("\n")),
+                Err(err) => {
+                    eprintln!("list_pr_packages_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ExternalPatchPackage(repo_path)) => {
+            match build_external_patch_package("memory", &repo_path) {
+                Ok(report) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report)
+                        .expect("serialize external patch package")
+                ),
+                Err(err) => {
+                    eprintln!("external_patch_package_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::LastExternalPatchPackage) => {
+            match print_last_external_patch_package("memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("last_external_patch_package_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ListExternalPatchPackages) => {
+            match list_external_patch_packages("memory") {
+                Ok(items) => println!("{}", items.join("\n")),
+                Err(err) => {
+                    eprintln!("list_external_patch_packages_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::SelfReviewPackage) => {
+            match build_self_review_package(".", "memory") {
+                Ok(report) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report).expect("serialize self review package")
+                ),
+                Err(err) => {
+                    eprintln!("self_review_package_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::LastSelfReviewPackage) => {
+            match print_last_self_review_package("memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("last_self_review_package_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ListSelfReviewPackages) => {
+            match list_self_review_packages("memory") {
+                Ok(items) => println!("{}", items.join("\n")),
+                Err(err) => {
+                    eprintln!("list_self_review_packages_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::OperatorConsole) => {
+            match print_operator_console(".", "memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("operator_console_error: {err}");
                     std::process::exit(1);
                 }
             }

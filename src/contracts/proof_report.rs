@@ -43,6 +43,16 @@ pub struct ProofReport {
     #[serde(default)]
     pub operator_runbook_support: bool,
     #[serde(default)]
+    pub operations_runtime_support: bool,
+    #[serde(default)]
+    pub pr_package_support: bool,
+    #[serde(default)]
+    pub external_patch_package_support: bool,
+    #[serde(default)]
+    pub self_review_package_support: bool,
+    #[serde(default)]
+    pub operator_console_support: bool,
+    #[serde(default)]
     pub auto_promote: bool,
     #[serde(default)]
     pub operator_approval_required: bool,

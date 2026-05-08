@@ -299,6 +299,42 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
   cargo run -- --operator-runbook
       Print concise Russian operator runbook.
 
+  cargo run -- --ops-status
+      Print combined local operations status.
+
+  cargo run -- --ops-json
+      Print deterministic local operations status JSON.
+
+  cargo run -- --pr-package
+      Build a metadata-only local PR package.
+
+  cargo run -- --last-pr-package
+      Print the latest PR package markdown.
+
+  cargo run -- --list-pr-packages
+      List stored PR package ids.
+
+  cargo run -- --external-patch-package <REPO_PATH>
+      Build a metadata-only external repository patch package.
+
+  cargo run -- --last-external-patch-package
+      Print the latest external patch package markdown.
+
+  cargo run -- --list-external-patch-packages
+      List stored external patch package ids.
+
+  cargo run -- --self-review-package
+      Build a controlled self-review package without self-apply.
+
+  cargo run -- --last-self-review-package
+      Print the latest self-review package markdown.
+
+  cargo run -- --list-self-review-packages
+      List stored self-review package ids.
+
+  cargo run -- --operator-console
+      Print the combined operator console.
+
   cargo run -- --distill-patterns
       Distill local-only successful and risky evolution patterns into memory/patterns/.
 
@@ -431,6 +467,18 @@ pub enum RuntimeCliCommand {
     FuturePhases,
     FuturePhasesJson,
     OperatorRunbook,
+    OpsStatus,
+    OpsJson,
+    PrPackage,
+    LastPrPackage,
+    ListPrPackages,
+    ExternalPatchPackage(String),
+    LastExternalPatchPackage,
+    ListExternalPatchPackages,
+    SelfReviewPackage,
+    LastSelfReviewPackage,
+    ListSelfReviewPackages,
+    OperatorConsole,
     ReleaseProposal,
     ReleaseProposalJson,
     ProofSnapshot,
@@ -692,6 +740,42 @@ impl RuntimeCliCommand {
         }
         if raw_args == ["--operator-runbook"] {
             return Ok(Self::OperatorRunbook);
+        }
+        if raw_args == ["--ops-status"] {
+            return Ok(Self::OpsStatus);
+        }
+        if raw_args == ["--ops-json"] {
+            return Ok(Self::OpsJson);
+        }
+        if raw_args == ["--pr-package"] {
+            return Ok(Self::PrPackage);
+        }
+        if raw_args == ["--last-pr-package"] {
+            return Ok(Self::LastPrPackage);
+        }
+        if raw_args == ["--list-pr-packages"] {
+            return Ok(Self::ListPrPackages);
+        }
+        if raw_args.len() == 2 && raw_args[0] == "--external-patch-package" {
+            return Ok(Self::ExternalPatchPackage(raw_args[1].clone()));
+        }
+        if raw_args == ["--last-external-patch-package"] {
+            return Ok(Self::LastExternalPatchPackage);
+        }
+        if raw_args == ["--list-external-patch-packages"] {
+            return Ok(Self::ListExternalPatchPackages);
+        }
+        if raw_args == ["--self-review-package"] {
+            return Ok(Self::SelfReviewPackage);
+        }
+        if raw_args == ["--last-self-review-package"] {
+            return Ok(Self::LastSelfReviewPackage);
+        }
+        if raw_args == ["--list-self-review-packages"] {
+            return Ok(Self::ListSelfReviewPackages);
+        }
+        if raw_args == ["--operator-console"] {
+            return Ok(Self::OperatorConsole);
         }
         if raw_args == ["--release-proposal"] {
             return Ok(Self::ReleaseProposal);

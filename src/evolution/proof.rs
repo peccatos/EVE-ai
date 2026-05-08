@@ -4,10 +4,11 @@ use std::path::Path;
 use crate::contracts::EvolutionLogEntry;
 use crate::contracts::ProofReport;
 use crate::evolution::{
-    build_preflight_gate, build_release_health, governance_status, latest_proof_snapshot_id,
-    latest_release_id, latest_supervised_run_id, load_or_refresh_promotion_queue, memory,
-    print_artifact_audit, print_operator_runbook, print_proof_snapshot, print_release_status,
-    refresh_metrics, release_count, release_ledger_count,
+    build_operations_report, build_preflight_gate, build_release_health, governance_status,
+    latest_proof_snapshot_id, latest_release_id, latest_supervised_run_id,
+    load_or_refresh_promotion_queue, memory, print_artifact_audit, print_operator_console,
+    print_operator_runbook, print_proof_snapshot, print_release_status, refresh_metrics,
+    release_count, release_ledger_count,
 };
 
 pub fn build_proof_report(project_root: &str, memory_root: &str) -> Result<ProofReport, String> {
@@ -49,6 +50,11 @@ pub fn build_proof_report(project_root: &str, memory_root: &str) -> Result<Proof
         release_ledger_support: true,
         future_phase_registry_support: true,
         operator_runbook_support: true,
+        operations_runtime_support: true,
+        pr_package_support: true,
+        external_patch_package_support: true,
+        self_review_package_support: true,
+        operator_console_support: true,
         auto_promote: false,
         operator_approval_required: true,
         forbidden_target_preservation: true,
@@ -125,8 +131,10 @@ pub fn run_demo(project_root: &str, memory_root: &str) -> Result<String, String>
     let gate = build_preflight_gate(project_root, memory_root)?;
     let artifact = print_artifact_audit(project_root)?;
     let runbook = print_operator_runbook(project_root, memory_root)?;
+    let operations = build_operations_report(project_root, memory_root)?;
+    let console = print_operator_console(project_root, memory_root)?;
     Ok(format!(
-        "{status}\n\ngovernance_status: approved={} rejected={} deferred={} ready_approved={} auto_promote={}\n\nrelease_status: {}\nrelease_health: grade={} score={}\npreflight_gate: status={}\n\n{}\n\n{}\n\n{}\n\n{}",
+        "{status}\n\ngovernance_status: approved={} rejected={} deferred={} ready_approved={} auto_promote={}\n\nrelease_status: {}\nrelease_health: grade={} score={}\npreflight_gate: status={}\noperations_status: next={} future_allowed_now={}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}",
         governance.approved_count,
         governance.rejected_count,
         governance.deferred_count,
@@ -136,8 +144,11 @@ pub fn run_demo(project_root: &str, memory_root: &str) -> Result<String, String>
         health.health_grade,
         health.health_score,
         gate.gate_status,
+        operations.next_safe_operator_action,
+        operations.future_phases_allowed_now,
         artifact,
         runbook,
+        console,
         report,
         snapshot
     ))
@@ -242,7 +253,7 @@ fn write_proof_report(memory_root: &str, proof: &ProofReport) -> Result<(), Stri
 
 fn render_proof_markdown(proof: &ProofReport) -> String {
     format!(
-        "# EVA Proof Report\n\nlocal_corpus_ingestion_support={}\nread_only_corpus_safety={}\ntask_suggestion_support={}\ncampaign_diagnostics_support={}\nzero_yield_task_adjustment_support={}\nbounded_campaign_loop_support={}\nrecombination_fallback_support={}\nreplay_review_support={}\npromotion_queue_support={}\nsupervised_task_support={}\ngovernance_runtime_support={}\nrelease_runtime_support={}\nrelease_health_support={}\nartifact_audit_support={}\ndeterminism_audit_support={}\npreflight_gate_v2_support={}\nrelease_ledger_support={}\nfuture_phase_registry_support={}\noperator_runbook_support={}\nauto_promote={}\noperator_approval_required={}\nforbidden_target_preservation={}\n\ntotal_runs={}\ncandidate_count={}\nreplay_passed_candidates={}\npromoted_candidates={}\nready_candidates={}\nblocked_candidates={}\napproved_count={}\nrejected_count={}\ndeferred_count={}\nrelease_count={}\nrelease_ledger_count={}\nlatest_release_id={}\nlatest_bounded_run_id={}\nlatest_supervised_run_id={}\n",
+        "# EVA Proof Report\n\nlocal_corpus_ingestion_support={}\nread_only_corpus_safety={}\ntask_suggestion_support={}\ncampaign_diagnostics_support={}\nzero_yield_task_adjustment_support={}\nbounded_campaign_loop_support={}\nrecombination_fallback_support={}\nreplay_review_support={}\npromotion_queue_support={}\nsupervised_task_support={}\ngovernance_runtime_support={}\nrelease_runtime_support={}\nrelease_health_support={}\nartifact_audit_support={}\ndeterminism_audit_support={}\npreflight_gate_v2_support={}\nrelease_ledger_support={}\nfuture_phase_registry_support={}\noperator_runbook_support={}\noperations_runtime_support={}\npr_package_support={}\nexternal_patch_package_support={}\nself_review_package_support={}\noperator_console_support={}\nauto_promote={}\noperator_approval_required={}\nforbidden_target_preservation={}\n\ntotal_runs={}\ncandidate_count={}\nreplay_passed_candidates={}\npromoted_candidates={}\nready_candidates={}\nblocked_candidates={}\napproved_count={}\nrejected_count={}\ndeferred_count={}\nrelease_count={}\nrelease_ledger_count={}\nlatest_release_id={}\nlatest_bounded_run_id={}\nlatest_supervised_run_id={}\n",
         proof.local_corpus_ingestion_support,
         proof.read_only_corpus_safety,
         proof.task_suggestion_support,
@@ -262,6 +273,11 @@ fn render_proof_markdown(proof: &ProofReport) -> String {
         proof.release_ledger_support,
         proof.future_phase_registry_support,
         proof.operator_runbook_support,
+        proof.operations_runtime_support,
+        proof.pr_package_support,
+        proof.external_patch_package_support,
+        proof.self_review_package_support,
+        proof.operator_console_support,
         proof.auto_promote,
         proof.operator_approval_required,
         proof.forbidden_target_preservation,
