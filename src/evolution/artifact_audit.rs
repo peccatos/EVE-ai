@@ -16,6 +16,7 @@ const RUNTIME_PATHS: &[&str] = &[
     "memory/bounded_runs/",
     "memory/supervised_runs/",
     "memory/governance/",
+    "memory/operations/",
     "memory/approvals/",
     "memory/release_proposals/",
     "memory/promotion_queue.json",
@@ -23,6 +24,7 @@ const RUNTIME_PATHS: &[&str] = &[
     "sandboxes/",
     ".eva-evolution-tests/",
     ".eva-runtime-tests/",
+    ".eva-operations-tests/",
 ];
 
 pub fn build_artifact_audit(project_root: &str) -> Result<ArtifactAuditReport, String> {

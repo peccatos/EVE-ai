@@ -5,12 +5,14 @@ pub mod bounded_loop;
 pub mod campaign;
 pub mod campaign_recombination;
 pub mod changelog;
+pub mod ci_pr;
 pub mod classification;
 pub mod corpus;
 pub mod corpus_validator;
 pub mod dedup;
 pub mod determinism_audit;
 pub mod evolution_policy;
+pub mod external_patch;
 pub mod future_phase;
 pub mod generator;
 pub mod governance;
@@ -21,7 +23,9 @@ pub mod memory;
 pub mod metrics;
 pub mod mutation_portfolio;
 pub mod mutator;
+pub mod operations;
 pub mod operator_approval;
+pub mod operator_console;
 pub mod operator_runbook;
 pub mod patterns;
 pub mod policy_feedback;
@@ -40,6 +44,7 @@ pub mod release_proposal;
 pub mod report_ru;
 pub mod rollback;
 pub mod scorer;
+pub mod self_review;
 pub mod strategy_portfolio;
 pub mod strategy_task_suggester;
 pub mod success_memory;
@@ -67,6 +72,7 @@ pub use campaign_recombination::{
     select_task_compatible_hypothesis, CampaignRecombinationDiagnostics,
     CampaignRecombinationPreview,
 };
+pub use ci_pr::{build_pr_package, list_pr_packages, print_last_pr_package};
 pub use classification::{
     classify_mutation_kind, classify_mutation_kind_label, mutation_class_label, MutationClass,
 };
@@ -85,6 +91,9 @@ pub use determinism_audit::{
 pub use evolution_policy::{
     load_or_refresh_evolution_policy, print_evolution_policy, refresh_evolution_policy,
     EvolutionPolicy,
+};
+pub use external_patch::{
+    build_external_patch_package, list_external_patch_packages, print_last_external_patch_package,
 };
 pub use future_phase::{
     build_future_phase_registry, print_future_phases, print_future_phases_json,
@@ -111,10 +120,12 @@ pub use mutation_portfolio::{
     MutationPortfolio, MutationPortfolioEntry,
 };
 pub use mutator::apply_mutation;
+pub use operations::{build_operations_report, print_ops_json, print_ops_status};
 pub use operator_approval::{
     approval_log, approval_status, approve_candidate, defer_candidate, latest_decisions,
     latest_record_for_run, record_promotion_event, reject_candidate,
 };
+pub use operator_console::{build_operator_console_report, print_operator_console};
 pub use operator_runbook::print_operator_runbook;
 pub use patterns::{distill_patterns, DistilledPatternSummary};
 pub use policy_feedback::{load_policy_feedback, update_policy_feedback, PolicyFeedback};
@@ -156,6 +167,9 @@ pub use report_ru::{
 };
 pub use rollback::rollback_sandbox;
 pub use scorer::{score_cycle, EvolutionScore};
+pub use self_review::{
+    build_self_review_package, list_self_review_packages, print_last_self_review_package,
+};
 pub use strategy_portfolio::{
     ensure_strategy_portfolio, infer_strategy, load_strategy_portfolio, print_strategy_portfolio,
     refresh_strategy_portfolio, StrategyPortfolio, StrategyPortfolioEntry,
