@@ -1,0 +1,257 @@
+use std::path::Path;
+
+use crate::contracts::{
+    ArtifactAuditReport, CapabilityPolicy, DeterminismAuditReport, GovernanceStatus,
+    PreflightGateV3Report, ProofReport, ReleaseHealthReport, RuntimeValidation, WorkspaceSnapshot,
+};
+use crate::evolution::{
+    build_artifact_audit, build_capability_policy, build_determinism_audit,
+    build_preflight_gate_v3, build_proof_report, build_release_health, build_workspace_snapshot,
+    governance_status, memory,
+};
+
+pub fn build_runtime_validation(
+    project_root: &str,
+    memory_root: &str,
+) -> Result<RuntimeValidation, String> {
+    let policy = build_capability_policy();
+    let governance = governance_status(project_root, memory_root)?;
+    let proof = build_proof_report(project_root, memory_root)?;
+    let health = build_release_health(project_root, memory_root)?;
+    let artifact = build_artifact_audit(project_root)?;
+    let determinism = build_determinism_audit(project_root, memory_root)?;
+    let gate_v3 = build_preflight_gate_v3(project_root, memory_root)?;
+    let snapshot = build_workspace_snapshot(project_root, memory_root)?;
+    let validation = evaluate_runtime_validation(
+        memory::now_unix(),
+        &policy,
+        &governance,
+        &proof,
+        &health,
+        &artifact,
+        &determinism,
+        &gate_v3,
+        &snapshot,
+    );
+    write_runtime_validation(memory_root, &validation)?;
+    Ok(validation)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn evaluate_runtime_validation(
+    generated_at: u64,
+    policy: &CapabilityPolicy,
+    governance: &GovernanceStatus,
+    proof: &ProofReport,
+    health: &ReleaseHealthReport,
+    artifact: &ArtifactAuditReport,
+    determinism: &DeterminismAuditReport,
+    gate_v3: &PreflightGateV3Report,
+    snapshot: &WorkspaceSnapshot,
+) -> RuntimeValidation {
+    let mut blockers = Vec::new();
+    let mut warnings = Vec::new();
+    let mut checks = Vec::new();
+
+    if policy.auto_promote_allowed
+        || policy.network_push_allowed
+        || policy.merge_allowed
+        || policy.external_repo_mutation_allowed
+        || policy.self_apply_allowed
+        || policy.source_mutation_without_approval_allowed
+    {
+        blockers.push("unsafe_capability_policy".to_string());
+    }
+    if !policy.metadata_generation_allowed || !policy.local_read_only_inspection_allowed {
+        blockers.push("required_metadata_capabilities_missing".to_string());
+    }
+    if !policy.sandboxed_validation_allowed_when_isolated {
+        blockers.push("isolated_sandbox_validation_disabled".to_string());
+    }
+    if artifact.should_fail_release || !artifact.sandbox_leaks.is_empty() {
+        blockers.push("artifact_audit_failed".to_string());
+    }
+    if snapshot.sandbox_leak_count > 0 {
+        blockers.push("sandbox_leaks_present".to_string());
+    }
+    if !determinism.full_source_content_warnings.is_empty() {
+        blockers.push("full_source_content_detected".to_string());
+    }
+    if !determinism.deterministic_enough {
+        blockers.push("determinism_audit_failed".to_string());
+    }
+    if proof.auto_promote || health.auto_promote || gate_v3.auto_promote {
+        blockers.push("auto_promote_true_detected".to_string());
+    }
+    if !proof.operator_approval_required
+        || !health.operator_approval_required
+        || !governance.operator_approval_required
+        || !gate_v3.operator_approval_required
+    {
+        blockers.push("operator_approval_disabled".to_string());
+    }
+    if gate_v3.status == "fail" {
+        blockers.push("preflight_gate_v3_failed".to_string());
+    }
+    if governance.promotion_ready_approved_count == 0 {
+        warnings.push("no_approved_release_candidate".to_string());
+    }
+    if gate_v3.status == "warn" {
+        warnings.push("preflight_gate_v3_warn".to_string());
+    }
+    if snapshot.modified_count > 0 || snapshot.untracked_count > 0 {
+        warnings.push("workspace_not_clean".to_string());
+    }
+    if health.health_grade == "yellow" {
+        warnings.push("release_health_yellow".to_string());
+    }
+
+    checks.push(format!(
+        "capability_policy:{}",
+        if blockers
+            .iter()
+            .any(|item| item == "unsafe_capability_policy")
+        {
+            "fail"
+        } else {
+            "pass"
+        }
+    ));
+    checks.push(format!(
+        "governance:approved={} ready_approved={} approval_required={}",
+        governance.approved_count,
+        governance.promotion_ready_approved_count,
+        governance.operator_approval_required
+    ));
+    checks.push(format!(
+        "proof:support_flags={} auto_promote={} approval_required={}",
+        proof_support_count(proof),
+        proof.auto_promote,
+        proof.operator_approval_required
+    ));
+    checks.push(format!(
+        "release_health:{} score={}",
+        health.health_grade, health.health_score
+    ));
+    checks.push(format!(
+        "artifact_audit:fail={} sandbox_leaks={}",
+        artifact.should_fail_release,
+        artifact.sandbox_leaks.len()
+    ));
+    checks.push(format!(
+        "determinism:deterministic_enough={} full_source_warnings={}",
+        determinism.deterministic_enough,
+        determinism.full_source_content_warnings.len()
+    ));
+    checks.push(format!("preflight_gate_v3:{}", gate_v3.status));
+    checks.push(format!(
+        "workspace_snapshot:modified={} untracked={} sandbox_leaks={}",
+        snapshot.modified_count, snapshot.untracked_count, snapshot.sandbox_leak_count
+    ));
+
+    blockers.sort();
+    blockers.dedup();
+    warnings.sort();
+    warnings.dedup();
+    checks.sort();
+
+    let status = if !blockers.is_empty() {
+        "blocked"
+    } else if !warnings.is_empty() {
+        "warn"
+    } else {
+        "pass"
+    }
+    .to_string();
+    let next_actions = if status == "blocked" {
+        vec![
+            "cargo run -- --artifact-audit".to_string(),
+            "cargo run -- --preflight-gate-v3".to_string(),
+            "cargo run -- --trust-proof-report".to_string(),
+        ]
+    } else if status == "warn" {
+        vec![
+            "cargo run -- --promotion-ready-approved".to_string(),
+            "cargo run -- --runtime-candidate".to_string(),
+            "cargo run -- --final-rc-report".to_string(),
+        ]
+    } else {
+        vec![
+            "cargo run -- --final-rc-report".to_string(),
+            "cargo run -- --operator-console".to_string(),
+        ]
+    };
+
+    RuntimeValidation {
+        validation_id: format!("runtime-validation-{generated_at}"),
+        generated_at,
+        status,
+        blockers,
+        warnings,
+        checks,
+        next_actions,
+        auto_promote: false,
+        operator_approval_required: true,
+    }
+}
+
+pub fn print_runtime_validation(project_root: &str, memory_root: &str) -> Result<String, String> {
+    serde_json::to_string_pretty(&build_runtime_validation(project_root, memory_root)?)
+        .map_err(|error| format!("failed to serialize runtime validation: {error}"))
+}
+
+fn write_runtime_validation(
+    memory_root: &str,
+    validation: &RuntimeValidation,
+) -> Result<(), String> {
+    memory::write_json(
+        Path::new(memory_root)
+            .join("runtime_validation")
+            .join(format!("{}.json", validation.validation_id)),
+        validation,
+    )
+}
+
+fn proof_support_count(proof: &ProofReport) -> usize {
+    [
+        proof.local_corpus_ingestion_support,
+        proof.read_only_corpus_safety,
+        proof.task_suggestion_support,
+        proof.campaign_diagnostics_support,
+        proof.zero_yield_task_adjustment_support,
+        proof.bounded_campaign_loop_support,
+        proof.recombination_fallback_support,
+        proof.replay_review_support,
+        proof.promotion_queue_support,
+        proof.supervised_task_support,
+        proof.governance_runtime_support,
+        proof.release_runtime_support,
+        proof.release_health_support,
+        proof.artifact_audit_support,
+        proof.determinism_audit_support,
+        proof.preflight_gate_v2_support,
+        proof.release_ledger_support,
+        proof.future_phase_registry_support,
+        proof.operator_runbook_support,
+        proof.operations_runtime_support,
+        proof.pr_package_support,
+        proof.external_patch_package_support,
+        proof.self_review_package_support,
+        proof.operator_console_support,
+        proof.capability_policy_support,
+        proof.trust_decision_support,
+        proof.evidence_bundle_support,
+        proof.workspace_snapshot_support,
+        proof.recovery_manifest_support,
+        proof.preflight_gate_v3_support,
+        proof.trust_proof_report_support,
+        proof.runtime_candidate_support,
+        proof.runtime_validation_support,
+        proof.runtime_service_metadata_support,
+        proof.stable_cli_contract_support,
+        proof.final_rc_report_support,
+    ]
+    .into_iter()
+    .filter(|enabled| *enabled)
+    .count()
+}

@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "evolution_test_support.rs"]
 mod evolution_test_support;
@@ -118,7 +117,7 @@ fn log_entry(
 
 #[test]
 fn candidate_stored_only_when_score_at_least_five() {
-    let root = temp_dir("candidate-store");
+    let root = evolution_test_support::unique_evolution_root("candidate-store");
     fs::create_dir_all(&root).expect("create temp memory");
 
     let accepted = log_entry(
@@ -176,7 +175,7 @@ fn candidate_stored_only_when_score_at_least_five() {
 #[test]
 fn replay_reruns_candidate_in_fresh_sandbox() {
     let project = temp_crate("replay-project");
-    let memory = temp_dir("replay-memory");
+    let memory = evolution_test_support::unique_evolution_root("replay-memory");
     fs::create_dir_all(&memory).expect("create memory");
 
     let entry = log_entry(
@@ -225,7 +224,7 @@ fn promotion_rejects_high_risk_and_core_targets() {
 
 #[test]
 fn graph_updates_after_successful_evolution() {
-    let memory = temp_dir("graph-memory");
+    let memory = evolution_test_support::unique_evolution_root("graph-memory");
     let entry = log_entry(
         "graph-run",
         10.0,
@@ -248,7 +247,7 @@ fn graph_updates_after_successful_evolution() {
 #[test]
 fn repo_ingestion_does_not_mutate_source_repo() {
     let project = temp_crate("ingest-project");
-    let memory = temp_dir("ingest-memory");
+    let memory = evolution_test_support::unique_evolution_root("ingest-memory");
     let before = fs::read_to_string(project.join("src/probe.rs")).expect("read before");
 
     ingest_repo_patterns(project.to_str().unwrap(), memory.to_str().unwrap()).expect("ingest repo");
@@ -264,7 +263,7 @@ fn repo_ingestion_does_not_mutate_source_repo() {
 
 #[test]
 fn candidate_summary_round_trips() {
-    let memory = temp_dir("summary-memory");
+    let memory = evolution_test_support::unique_evolution_root("summary-memory");
     let entry = log_entry(
         "summary-run",
         7.0,
@@ -314,7 +313,7 @@ fn useful_replace_text_score_can_be_candidate() {
 #[test]
 fn promote_add_unittest_creates_missing_target_file() {
     let project = temp_crate("promote-new-file");
-    let memory = temp_dir("promote-new-file-memory");
+    let memory = evolution_test_support::unique_evolution_root("promote-new-file-memory");
     fs::create_dir_all(&memory).expect("create memory");
 
     let run_id = "promote-new-file-run";
@@ -347,7 +346,7 @@ fn promote_add_unittest_creates_missing_target_file() {
 #[test]
 fn failed_new_file_promotion_removes_created_file() {
     let project = temp_crate("promote-new-file-rollback");
-    let memory = temp_dir("promote-new-file-rollback-memory");
+    let memory = evolution_test_support::unique_evolution_root("promote-new-file-rollback-memory");
     fs::create_dir_all(&memory).expect("create memory");
 
     let run_id = "promote-new-file-rollback-run";
@@ -378,7 +377,8 @@ fn failed_new_file_promotion_removes_created_file() {
 #[test]
 fn failed_existing_file_promotion_restores_backup() {
     let project = temp_crate("promote-existing-file-rollback");
-    let memory = temp_dir("promote-existing-file-rollback-memory");
+    let memory =
+        evolution_test_support::unique_evolution_root("promote-existing-file-rollback-memory");
     fs::create_dir_all(&memory).expect("create memory");
     fs::create_dir_all(project.join("tests")).expect("create tests dir");
     let target = project.join("tests/evolution_generated_tests.rs");
@@ -416,7 +416,7 @@ fn failed_existing_file_promotion_restores_backup() {
 #[test]
 fn promotion_rejects_forbidden_new_files() {
     let project = temp_crate("promote-forbidden-new-file");
-    let memory = temp_dir("promote-forbidden-new-file-memory");
+    let memory = evolution_test_support::unique_evolution_root("promote-forbidden-new-file-memory");
     fs::create_dir_all(&memory).expect("create memory");
 
     let run_id = "promote-forbidden-new-file-run";
@@ -463,10 +463,6 @@ fn temp_crate(name: &str) -> PathBuf {
     .expect("write lib");
     fs::write(root.join("src/probe.rs"), "pub fn probe() {}\n").expect("write probe");
     root
-}
-
-fn temp_dir(name: &str) -> PathBuf {
-    evolution_test_support::unique_evolution_root(name)
 }
 
 trait ReadToStringLossy {

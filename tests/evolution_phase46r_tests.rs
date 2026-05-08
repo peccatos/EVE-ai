@@ -1,7 +1,5 @@
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "evolution_test_support.rs"]
 mod evolution_test_support;
@@ -208,8 +206,4 @@ fn seed_graph(root: &PathBuf) {
 }"#,
     )
     .expect("write graph");
-}
-
-fn temp_dir(name: &str) -> PathBuf {
-    evolution_test_support::unique_evolution_root(name)
 }

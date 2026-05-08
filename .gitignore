@@ -57,6 +57,10 @@ memory/operations/
 memory/evidence/
 memory/workspace_snapshots/
 memory/recovery/
+memory/runtime_candidates/
+memory/runtime_validation/
+memory/runtime_service/
+memory/final_rc/
 memory/releases/
 memory/releases/bundles/
 memory/releases/manifests/

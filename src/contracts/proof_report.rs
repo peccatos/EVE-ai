@@ -67,6 +67,16 @@ pub struct ProofReport {
     #[serde(default)]
     pub trust_proof_report_support: bool,
     #[serde(default)]
+    pub runtime_candidate_support: bool,
+    #[serde(default)]
+    pub runtime_validation_support: bool,
+    #[serde(default)]
+    pub runtime_service_metadata_support: bool,
+    #[serde(default)]
+    pub stable_cli_contract_support: bool,
+    #[serde(default)]
+    pub final_rc_report_support: bool,
+    #[serde(default)]
     pub auto_promote: bool,
     #[serde(default)]
     pub operator_approval_required: bool,

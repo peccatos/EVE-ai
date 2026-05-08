@@ -2,8 +2,9 @@ use crate::contracts::OperatorConsoleReport;
 use crate::evolution::{
     build_artifact_audit, build_capability_policy, build_determinism_audit,
     build_future_phase_registry, build_operations_report, build_preflight_gate,
-    build_preflight_gate_v3, build_release_health, build_trust_decision, build_workspace_snapshot,
-    governance_status, memory, print_eva_status, print_operator_runbook, print_release_status,
+    build_preflight_gate_v3, build_release_health, build_runtime_candidate_manifest,
+    build_trust_decision, build_workspace_snapshot, governance_status, memory, print_eva_status,
+    print_operator_runbook, print_release_status,
 };
 
 pub fn build_operator_console_report(
@@ -22,6 +23,7 @@ pub fn build_operator_console_report(
     let trust = build_trust_decision(project_root, memory_root)?;
     let snapshot = build_workspace_snapshot(project_root, memory_root)?;
     let gate_v3 = build_preflight_gate_v3(project_root, memory_root)?;
+    let runtime_candidate = build_runtime_candidate_manifest(project_root, memory_root)?;
     Ok(OperatorConsoleReport {
         generated_at: memory::now_unix(),
         status_lines: vec![
@@ -70,6 +72,12 @@ pub fn build_operator_console_report(
             ),
             format!("preflight_gate_v3: status={}", gate_v3.status),
             format!(
+                "runtime_candidate: status={} id={} planned_phases={}",
+                runtime_candidate.rc_status,
+                runtime_candidate.candidate_id,
+                runtime_candidate.planned_phases.len()
+            ),
+            format!(
                 "future_phases: {}",
                 future
                     .entries
@@ -85,6 +93,9 @@ pub fn build_operator_console_report(
             } else {
                 operations.next_safe_operator_action
             },
+            "cargo run -- --runtime-candidate".to_string(),
+            "cargo run -- --runtime-validation".to_string(),
+            "cargo run -- --final-rc-report".to_string(),
             "cargo run -- --preflight-gate-v3".to_string(),
             "cargo run -- --proof-report".to_string(),
             "cargo run -- --operator-runbook".to_string(),

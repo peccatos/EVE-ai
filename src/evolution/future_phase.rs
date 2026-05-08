@@ -43,10 +43,9 @@ pub fn build_future_phase_registry() -> FuturePhaseRegistry {
             FuturePhaseEntry {
                 phase: "15.0".to_string(),
                 name: "EVA Runtime v1.0 Candidate".to_string(),
-                status: "planned".to_string(),
+                status: "completed_by_phase_15_0x".to_string(),
                 allowed_now: false,
-                reason: "requires a stable completed trust and workspace recovery gate first"
-                    .to_string(),
+                reason: "completed by the final local runtime v1.0 candidate layer".to_string(),
             },
         ],
     }

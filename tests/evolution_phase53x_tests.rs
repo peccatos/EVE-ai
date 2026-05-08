@@ -1,7 +1,5 @@
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "evolution_test_support.rs"]
 mod evolution_test_support;
@@ -230,7 +228,7 @@ fn seed_hygiene_memory(root: &PathBuf) {
 }
 
 fn temp_hygiene_crate(name: &str) -> PathBuf {
-    let root = temp_dir(name);
+    let root = evolution_test_support::unique_evolution_root(name);
     fs::create_dir_all(root.join("src")).expect("src");
     fs::create_dir_all(root.join("tests")).expect("tests");
     fs::write(
@@ -275,8 +273,4 @@ fn run_ok(root: &PathBuf, args: &[&str]) -> String {
         String::from_utf8_lossy(&output.stderr)
     );
     String::from_utf8_lossy(&output.stdout).to_string()
-}
-
-fn temp_dir(name: &str) -> PathBuf {
-    evolution_test_support::unique_evolution_root(name)
 }
