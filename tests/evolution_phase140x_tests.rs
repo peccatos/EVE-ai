@@ -168,8 +168,10 @@ fn demo_and_operator_console_include_phase14_status() {
     assert!(demo.contains("preflight_gate_v3:"));
     assert!(demo.contains("Phase 14.0: Trust + Workspace Recovery Gate"));
     assert!(demo.contains("status=completed_by_phase_14_0x"));
+    assert!(demo.contains("Phase 15.0: EVA Runtime v1.0 Candidate status=completed_by_phase_15_0x"));
     assert!(console.contains("capability_policy:"));
     assert!(console.contains("preflight_gate_v3:"));
+    assert!(console.contains("runtime_candidate: status="));
     assert!(console.contains("Phase 14.0: Trust + Workspace Recovery Gate"));
     assert!(console.contains("Phase 15.0: EVA Runtime v1.0 Candidate"));
     assert!(trust_report.contains("Trust Proof Report"));
@@ -177,15 +179,18 @@ fn demo_and_operator_console_include_phase14_status() {
 }
 
 #[test]
-fn future_phase_registry_marks_phase14_completed_and_only_phase15_planned() {
+fn future_phase_registry_marks_phase15_completed_with_no_remaining_planned_tail() {
     let output = print_future_phases();
     assert!(output.contains(
         "Phase 13.0: Controlled Self-Modification Review Runtime status=completed_by_phase_13_0x"
     ));
     assert!(output
         .contains("Phase 14.0: Trust + Workspace Recovery Gate status=completed_by_phase_14_0x"));
-    assert!(output.contains("Phase 15.0: EVA Runtime v1.0 Candidate status=planned"));
+    assert!(
+        output.contains("Phase 15.0: EVA Runtime v1.0 Candidate status=completed_by_phase_15_0x")
+    );
     assert!(!output.contains("Phase 14.0: Trust + Workspace Recovery Gate status=planned"));
+    assert!(!output.contains("Phase 15.0: EVA Runtime v1.0 Candidate status=planned"));
     assert!(!output.contains("Stable Local Release Candidate Flow"));
     assert!(!output.contains("Local CI Runner / Matrix Validation"));
     assert!(!output.contains("External Repo Patch Dry-Run Runtime"));

@@ -374,6 +374,21 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
   cargo run -- --trust-proof-report
       Print unified Phase 14 trust proof report.
 
+  cargo run -- --runtime-candidate
+      Build and print the Phase 15 runtime v1.0 candidate manifest JSON.
+
+  cargo run -- --runtime-validation
+      Build and print the Phase 15 runtime validation JSON.
+
+  cargo run -- --runtime-service
+      Print local runtime service metadata JSON.
+
+  cargo run -- --runtime-cli-contract
+      Print stable runtime CLI contract JSON.
+
+  cargo run -- --final-rc-report
+      Print the final EVA Runtime v1.0 candidate markdown report.
+
   cargo run -- --distill-patterns
       Distill local-only successful and risky evolution patterns into memory/patterns/.
 
@@ -531,6 +546,11 @@ pub enum RuntimeCliCommand {
     ListRecoveryManifests,
     PreflightGateV3,
     TrustProofReport,
+    RuntimeCandidate,
+    RuntimeValidation,
+    RuntimeService,
+    RuntimeCliContract,
+    FinalRcReport,
     ReleaseProposal,
     ReleaseProposalJson,
     ProofSnapshot,
@@ -867,6 +887,21 @@ impl RuntimeCliCommand {
         }
         if raw_args == ["--trust-proof-report"] {
             return Ok(Self::TrustProofReport);
+        }
+        if raw_args == ["--runtime-candidate"] {
+            return Ok(Self::RuntimeCandidate);
+        }
+        if raw_args == ["--runtime-validation"] {
+            return Ok(Self::RuntimeValidation);
+        }
+        if raw_args == ["--runtime-service"] {
+            return Ok(Self::RuntimeService);
+        }
+        if raw_args == ["--runtime-cli-contract"] {
+            return Ok(Self::RuntimeCliContract);
+        }
+        if raw_args == ["--final-rc-report"] {
+            return Ok(Self::FinalRcReport);
         }
         if raw_args == ["--release-proposal"] {
             return Ok(Self::ReleaseProposal);

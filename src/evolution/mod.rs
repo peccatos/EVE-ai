@@ -15,6 +15,7 @@ pub mod determinism_audit;
 pub mod evidence_bundle;
 pub mod evolution_policy;
 pub mod external_patch;
+pub mod final_rc_report;
 pub mod future_phase;
 pub mod generator;
 pub mod governance;
@@ -47,6 +48,10 @@ pub mod release_preflight;
 pub mod release_proposal;
 pub mod report_ru;
 pub mod rollback;
+pub mod runtime_candidate;
+pub mod runtime_cli_contract;
+pub mod runtime_service;
+pub mod runtime_validation;
 pub mod scorer;
 pub mod self_review;
 pub mod strategy_portfolio;
@@ -107,6 +112,7 @@ pub use evolution_policy::{
 pub use external_patch::{
     build_external_patch_package, list_external_patch_packages, print_last_external_patch_package,
 };
+pub use final_rc_report::{build_final_rc_report, print_final_rc_report};
 pub use future_phase::{
     build_future_phase_registry, print_future_phases, print_future_phases_json,
 };
@@ -183,6 +189,14 @@ pub use report_ru::{
     load_report_json, print_last_report, print_report, refresh_report, write_report,
 };
 pub use rollback::rollback_sandbox;
+pub use runtime_candidate::{
+    build_runtime_candidate_manifest, print_runtime_candidate, proof_support_flags,
+};
+pub use runtime_cli_contract::{build_runtime_cli_contract, print_runtime_cli_contract};
+pub use runtime_service::{build_runtime_service_metadata, print_runtime_service};
+pub use runtime_validation::{
+    build_runtime_validation, evaluate_runtime_validation, print_runtime_validation,
+};
 pub use scorer::{score_cycle, EvolutionScore};
 pub use self_review::{
     build_self_review_package, list_self_review_packages, print_last_self_review_package,

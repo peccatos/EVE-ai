@@ -11,20 +11,22 @@ use eva_runtime_with_task_validator::{
     list_workspace_snapshots, load_corpus_summary, load_metrics, preview_campaign_recombination,
     print_artifact_audit, print_artifact_audit_json, print_benchmark, print_bounded_run_report,
     print_campaign, print_campaign_report, print_capability_policy, print_determinism_audit,
-    print_determinism_audit_json, print_eva_status, print_evolution_policy, print_future_phases,
-    print_future_phases_json, print_hygiene_plan, print_hygiene_report, print_last_bounded_run,
-    print_last_campaign_report, print_last_evidence_bundle, print_last_external_patch_package,
-    print_last_pr_package, print_last_recovery_manifest, print_last_release, print_last_report,
-    print_last_self_review_package, print_last_supervised_run, print_last_task_adjustment,
-    print_last_workspace_snapshot, print_operator_console, print_operator_runbook, print_ops_json,
-    print_ops_status, print_portfolio, print_preflight_gate, print_preflight_gate_json,
-    print_preflight_gate_v3, print_promotion_queue, print_proof_json, print_proof_report,
-    print_proof_snapshot, print_proof_snapshot_json, print_quality_report,
-    print_record_release_attempt, print_release_bundle_json, print_release_changelog,
-    print_release_health, print_release_health_json, print_release_ledger,
-    print_release_ledger_json, print_release_manifest, print_release_preflight_json,
-    print_release_proposal, print_release_proposal_json, print_release_status, print_report,
-    print_rollback_manifest, print_strategy_portfolio, print_supervised_run_report,
+    print_determinism_audit_json, print_eva_status, print_evolution_policy, print_final_rc_report,
+    print_future_phases, print_future_phases_json, print_hygiene_plan, print_hygiene_report,
+    print_last_bounded_run, print_last_campaign_report, print_last_evidence_bundle,
+    print_last_external_patch_package, print_last_pr_package, print_last_recovery_manifest,
+    print_last_release, print_last_report, print_last_self_review_package,
+    print_last_supervised_run, print_last_task_adjustment, print_last_workspace_snapshot,
+    print_operator_console, print_operator_runbook, print_ops_json, print_ops_status,
+    print_portfolio, print_preflight_gate, print_preflight_gate_json, print_preflight_gate_v3,
+    print_promotion_queue, print_proof_json, print_proof_report, print_proof_snapshot,
+    print_proof_snapshot_json, print_quality_report, print_record_release_attempt,
+    print_release_bundle_json, print_release_changelog, print_release_health,
+    print_release_health_json, print_release_ledger, print_release_ledger_json,
+    print_release_manifest, print_release_preflight_json, print_release_proposal,
+    print_release_proposal_json, print_release_status, print_report, print_rollback_manifest,
+    print_runtime_candidate, print_runtime_cli_contract, print_runtime_service,
+    print_runtime_validation, print_strategy_portfolio, print_supervised_run_report,
     print_trust_decision, print_trust_proof_report, promote_approved_candidate, promote_candidate,
     promotion_blocked_items, promotion_ready_approved, promotion_ready_items, refresh_metrics,
     refresh_portfolio, refresh_promotion_queue, refresh_report, refresh_strategy_portfolio,
@@ -1311,6 +1313,56 @@ fn main() {
                 Ok(report) => println!("{report}"),
                 Err(err) => {
                     eprintln!("trust_proof_report_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::RuntimeCandidate) => {
+            match print_runtime_candidate(".", "memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("runtime_candidate_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::RuntimeValidation) => {
+            match print_runtime_validation(".", "memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("runtime_validation_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::RuntimeService) => {
+            match print_runtime_service("memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("runtime_service_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::RuntimeCliContract) => {
+            match print_runtime_cli_contract("memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("runtime_cli_contract_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::FinalRcReport) => {
+            match print_final_rc_report(".", "memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("final_rc_report_error: {err}");
                     std::process::exit(1);
                 }
             }
