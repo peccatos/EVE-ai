@@ -1,7 +1,5 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "evolution_test_support.rs"]
 mod evolution_test_support;

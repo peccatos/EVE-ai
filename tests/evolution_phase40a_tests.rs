@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "evolution_test_support.rs"]
 mod evolution_test_support;
@@ -89,7 +88,7 @@ fn regression_memory_updates_after_non_useful_mutation() {
 
 #[test]
 fn success_memory_updates_only_for_useful_candidate() {
-    let memory = temp_dir("phase40a-success");
+    let memory = evolution_test_support::unique_evolution_root("phase40a-success");
     fs::create_dir_all(&memory).expect("create memory");
 
     let useful = useful_entry("run-useful");
@@ -176,7 +175,7 @@ fn mutation_digest_is_deterministic() {
 
 #[test]
 fn metrics_refresh_reconciles_candidate_count_with_files_on_disk() {
-    let memory = temp_dir("phase40a-metrics");
+    let memory = evolution_test_support::unique_evolution_root("phase40a-metrics");
     fs::create_dir_all(memory.join("candidates")).expect("create candidates");
     fs::write(
         memory.join("metrics.json"),
@@ -233,7 +232,7 @@ fn metrics_refresh_reconciles_candidate_count_with_files_on_disk() {
 
 #[test]
 fn learning_summary_prints_without_panic() {
-    let memory = temp_dir("phase40a-learning");
+    let memory = evolution_test_support::unique_evolution_root("phase40a-learning");
     fs::create_dir_all(&memory).expect("create memory");
     fs::write(
         memory.join("regressions.json"),
@@ -260,7 +259,7 @@ fn learning_summary_prints_without_panic() {
 
 #[test]
 fn old_logs_with_missing_new_fields_still_load() {
-    let memory = temp_dir("phase40a-legacy-logs");
+    let memory = evolution_test_support::unique_evolution_root("phase40a-legacy-logs");
     fs::create_dir_all(&memory).expect("create memory");
     fs::write(
         memory.join("evolution.jsonl"),
@@ -289,10 +288,6 @@ fn temp_crate(name: &str) -> PathBuf {
     fs::write(root.join("src/runtime_cycle.rs"), "pub fn cycle() {}\n")
         .expect("write runtime cycle");
     root
-}
-
-fn temp_dir(name: &str) -> PathBuf {
-    evolution_test_support::unique_evolution_root(name)
 }
 
 fn candidate_summary_count(memory_root: &PathBuf) -> usize {

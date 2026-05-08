@@ -1,7 +1,5 @@
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "evolution_test_support.rs"]
 mod evolution_test_support;
@@ -148,7 +146,7 @@ fn forbidden_targets_are_never_selected() {
 }
 
 fn temp_crate(name: &str) -> PathBuf {
-    let root = temp_dir(name);
+    let root = evolution_test_support::unique_evolution_root(name);
     fs::create_dir_all(root.join("src/core")).expect("src/core");
     fs::create_dir_all(root.join("src/evolution")).expect("src/evolution");
     fs::create_dir_all(root.join("memory/patterns")).expect("memory patterns");
@@ -310,8 +308,4 @@ fn run_ok(root: &PathBuf, args: &[&str]) -> String {
         String::from_utf8_lossy(&output.stderr)
     );
     String::from_utf8_lossy(&output.stdout).to_string()
-}
-
-fn temp_dir(name: &str) -> PathBuf {
-    evolution_test_support::unique_evolution_root(name)
 }

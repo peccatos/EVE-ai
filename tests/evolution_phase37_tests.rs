@@ -1,7 +1,5 @@
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "evolution_test_support.rs"]
 mod evolution_test_support;
@@ -39,7 +37,7 @@ fn helper_test() {}
 
 #[test]
 fn graph_analyzer_does_not_target_forbidden_files() {
-    let memory = temp_dir("phase37-analyzer");
+    let memory = evolution_test_support::unique_evolution_root("phase37-analyzer");
     fs::create_dir_all(&memory).expect("create memory");
     fs::write(
         memory.join("graph.json"),
@@ -217,8 +215,4 @@ fn temp_crate(name: &str) -> PathBuf {
     )
     .expect("write probe");
     root
-}
-
-fn temp_dir(name: &str) -> PathBuf {
-    evolution_test_support::unique_evolution_root(name)
 }

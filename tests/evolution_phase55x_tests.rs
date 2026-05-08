@@ -1,7 +1,5 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "evolution_test_support.rs"]
 mod evolution_test_support;
@@ -298,7 +296,7 @@ fn old_corpus_summary_without_generated_at_is_backward_compatible() {
 }
 
 fn temp_campaign_crate(name: &str) -> PathBuf {
-    let root = temp_dir(name);
+    let root = evolution_test_support::unique_evolution_root(name);
     fs::create_dir_all(root.join("src")).expect("src");
     fs::create_dir_all(root.join("tests")).expect("tests");
     fs::create_dir_all(root.join("memory")).expect("memory");
@@ -567,8 +565,4 @@ fn run_ok(root: &Path, args: &[&str]) -> String {
         String::from_utf8_lossy(&output.stderr)
     );
     String::from_utf8(output.stdout).expect("stdout")
-}
-
-fn temp_dir(prefix: &str) -> PathBuf {
-    evolution_test_support::unique_evolution_root(prefix)
 }
