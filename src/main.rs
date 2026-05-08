@@ -1,35 +1,39 @@
 use eva_runtime_with_task_validator::{
     adjust_task_from_campaign, approval_log, approval_status, approve_candidate, autonomy_status,
-    build_external_patch_package, build_pr_package, build_project_phase_runtime_output,
-    build_self_review_package, candidate_diff, candidate_lifecycle, default_corpus_contract,
+    build_evidence_bundle, build_external_patch_package, build_pr_package,
+    build_project_phase_runtime_output, build_recovery_manifest, build_self_review_package,
+    build_workspace_snapshot, candidate_diff, candidate_lifecycle, default_corpus_contract,
     defer_candidate, distill_patterns, fix_generated_test_names, governance_status, ingest_corpus,
     ingest_repo_patterns, latest_corpus_id, learning_summary, list_adjusted_tasks,
-    list_bounded_runs, list_candidates, list_corpora, list_external_patch_packages,
-    list_pr_packages, list_releases, list_self_review_packages, list_suggested_tasks,
-    list_supervised_runs, load_corpus_summary, load_metrics, preview_campaign_recombination,
+    list_bounded_runs, list_candidates, list_corpora, list_evidence_bundles,
+    list_external_patch_packages, list_pr_packages, list_recovery_manifests, list_releases,
+    list_self_review_packages, list_suggested_tasks, list_supervised_runs,
+    list_workspace_snapshots, load_corpus_summary, load_metrics, preview_campaign_recombination,
     print_artifact_audit, print_artifact_audit_json, print_benchmark, print_bounded_run_report,
-    print_campaign, print_campaign_report, print_determinism_audit, print_determinism_audit_json,
-    print_eva_status, print_evolution_policy, print_future_phases, print_future_phases_json,
-    print_hygiene_plan, print_hygiene_report, print_last_bounded_run, print_last_campaign_report,
-    print_last_external_patch_package, print_last_pr_package, print_last_release,
-    print_last_report, print_last_self_review_package, print_last_supervised_run,
-    print_last_task_adjustment, print_operator_console, print_operator_runbook, print_ops_json,
+    print_campaign, print_campaign_report, print_capability_policy, print_determinism_audit,
+    print_determinism_audit_json, print_eva_status, print_evolution_policy, print_future_phases,
+    print_future_phases_json, print_hygiene_plan, print_hygiene_report, print_last_bounded_run,
+    print_last_campaign_report, print_last_evidence_bundle, print_last_external_patch_package,
+    print_last_pr_package, print_last_recovery_manifest, print_last_release, print_last_report,
+    print_last_self_review_package, print_last_supervised_run, print_last_task_adjustment,
+    print_last_workspace_snapshot, print_operator_console, print_operator_runbook, print_ops_json,
     print_ops_status, print_portfolio, print_preflight_gate, print_preflight_gate_json,
-    print_promotion_queue, print_proof_json, print_proof_report, print_proof_snapshot,
-    print_proof_snapshot_json, print_quality_report, print_record_release_attempt,
-    print_release_bundle_json, print_release_changelog, print_release_health,
-    print_release_health_json, print_release_ledger, print_release_ledger_json,
-    print_release_manifest, print_release_preflight_json, print_release_proposal,
-    print_release_proposal_json, print_release_status, print_report, print_rollback_manifest,
-    print_strategy_portfolio, print_supervised_run_report, promote_approved_candidate,
-    promote_candidate, promotion_blocked_items, promotion_ready_approved, promotion_ready_items,
-    refresh_metrics, refresh_portfolio, refresh_promotion_queue, refresh_report,
-    refresh_strategy_portfolio, reject_candidate, render_plans, render_recombined_hypotheses,
-    replay_candidate, review_candidate, run_benchmark, run_bounded_evolution, run_demo,
-    run_evolution_cycle, run_planned_cycles, run_planned_evolution_cycle,
-    run_recombined_evolution_cycle, run_repo_patch_report, run_stored_campaign, run_task_from_path,
-    serve_runtime_daemon, should_run_repo_patch_mode, suggest_strategy_tasks, supervise_task,
-    CycleInput, RepoPatchCliConfig, RuntimeCliCommand, RuntimeCycleRunner, RUNTIME_CLI_HELP,
+    print_preflight_gate_v3, print_promotion_queue, print_proof_json, print_proof_report,
+    print_proof_snapshot, print_proof_snapshot_json, print_quality_report,
+    print_record_release_attempt, print_release_bundle_json, print_release_changelog,
+    print_release_health, print_release_health_json, print_release_ledger,
+    print_release_ledger_json, print_release_manifest, print_release_preflight_json,
+    print_release_proposal, print_release_proposal_json, print_release_status, print_report,
+    print_rollback_manifest, print_strategy_portfolio, print_supervised_run_report,
+    print_trust_decision, print_trust_proof_report, promote_approved_candidate, promote_candidate,
+    promotion_blocked_items, promotion_ready_approved, promotion_ready_items, refresh_metrics,
+    refresh_portfolio, refresh_promotion_queue, refresh_report, refresh_strategy_portfolio,
+    reject_candidate, render_plans, render_recombined_hypotheses, replay_candidate,
+    review_candidate, run_benchmark, run_bounded_evolution, run_demo, run_evolution_cycle,
+    run_planned_cycles, run_planned_evolution_cycle, run_recombined_evolution_cycle,
+    run_repo_patch_report, run_stored_campaign, run_task_from_path, serve_runtime_daemon,
+    should_run_repo_patch_mode, suggest_strategy_tasks, supervise_task, CycleInput,
+    RepoPatchCliConfig, RuntimeCliCommand, RuntimeCycleRunner, RUNTIME_CLI_HELP,
 };
 use serde::Deserialize;
 use std::fs;
@@ -1168,6 +1172,145 @@ fn main() {
                 Ok(report) => println!("{report}"),
                 Err(err) => {
                     eprintln!("operator_console_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::CapabilityPolicy) => {
+            match print_capability_policy() {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("capability_policy_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::TrustDecision) => {
+            match print_trust_decision(".", "memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("trust_decision_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::WorkspaceSnapshot) => {
+            match build_workspace_snapshot(".", "memory") {
+                Ok(report) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report).expect("serialize workspace snapshot")
+                ),
+                Err(err) => {
+                    eprintln!("workspace_snapshot_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::LastWorkspaceSnapshot) => {
+            match print_last_workspace_snapshot("memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("last_workspace_snapshot_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ListWorkspaceSnapshots) => {
+            match list_workspace_snapshots("memory") {
+                Ok(items) => println!("{}", items.join("\n")),
+                Err(err) => {
+                    eprintln!("list_workspace_snapshots_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::EvidenceBundle) => {
+            match build_evidence_bundle(".", "memory") {
+                Ok(report) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report).expect("serialize evidence bundle")
+                ),
+                Err(err) => {
+                    eprintln!("evidence_bundle_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::LastEvidenceBundle) => {
+            match print_last_evidence_bundle("memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("last_evidence_bundle_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ListEvidenceBundles) => {
+            match list_evidence_bundles("memory") {
+                Ok(items) => println!("{}", items.join("\n")),
+                Err(err) => {
+                    eprintln!("list_evidence_bundles_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::RecoveryManifest) => {
+            match build_recovery_manifest(".", "memory") {
+                Ok(report) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report).expect("serialize recovery manifest")
+                ),
+                Err(err) => {
+                    eprintln!("recovery_manifest_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::LastRecoveryManifest) => {
+            match print_last_recovery_manifest("memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("last_recovery_manifest_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::ListRecoveryManifests) => {
+            match list_recovery_manifests("memory") {
+                Ok(items) => println!("{}", items.join("\n")),
+                Err(err) => {
+                    eprintln!("list_recovery_manifests_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::PreflightGateV3) => {
+            match print_preflight_gate_v3(".", "memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("preflight_gate_v3_error: {err}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+        Ok(RuntimeCliCommand::TrustProofReport) => {
+            match print_trust_proof_report(".", "memory") {
+                Ok(report) => println!("{report}"),
+                Err(err) => {
+                    eprintln!("trust_proof_report_error: {err}");
                     std::process::exit(1);
                 }
             }

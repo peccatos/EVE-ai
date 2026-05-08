@@ -54,6 +54,9 @@ memory/supervised_runs/
 memory/proof/
 memory/governance/
 memory/operations/
+memory/evidence/
+memory/workspace_snapshots/
+memory/recovery/
 memory/releases/
 memory/releases/bundles/
 memory/releases/manifests/

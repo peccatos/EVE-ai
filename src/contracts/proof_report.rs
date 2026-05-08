@@ -53,6 +53,20 @@ pub struct ProofReport {
     #[serde(default)]
     pub operator_console_support: bool,
     #[serde(default)]
+    pub capability_policy_support: bool,
+    #[serde(default)]
+    pub trust_decision_support: bool,
+    #[serde(default)]
+    pub evidence_bundle_support: bool,
+    #[serde(default)]
+    pub workspace_snapshot_support: bool,
+    #[serde(default)]
+    pub recovery_manifest_support: bool,
+    #[serde(default)]
+    pub preflight_gate_v3_support: bool,
+    #[serde(default)]
+    pub trust_proof_report_support: bool,
+    #[serde(default)]
     pub auto_promote: bool,
     #[serde(default)]
     pub operator_approval_required: bool,
