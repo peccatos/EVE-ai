@@ -6,7 +6,7 @@ mod evolution_test_support;
 
 use eva_runtime_with_task_validator::{
     build_capability_policy, build_evidence_bundle, build_preflight_gate_v3,
-    build_recovery_manifest, build_trust_decision, build_workspace_snapshot,
+    build_recovery_manifest, build_trust_decision, build_workspace_snapshot, print_future_phases,
     print_operator_console, print_proof_json, print_proof_report, print_trust_proof_report,
     run_demo,
 };
@@ -166,10 +166,31 @@ fn demo_and_operator_console_include_phase14_status() {
     .expect("trust proof");
     assert!(demo.contains("trust_decision:"));
     assert!(demo.contains("preflight_gate_v3:"));
+    assert!(demo.contains("Phase 14.0: Trust + Workspace Recovery Gate"));
+    assert!(demo.contains("status=completed_by_phase_14_0x"));
     assert!(console.contains("capability_policy:"));
     assert!(console.contains("preflight_gate_v3:"));
+    assert!(console.contains("Phase 14.0: Trust + Workspace Recovery Gate"));
+    assert!(console.contains("Phase 15.0: EVA Runtime v1.0 Candidate"));
     assert!(trust_report.contains("Trust Proof Report"));
     evolution_test_support::remove_root(&root);
+}
+
+#[test]
+fn future_phase_registry_marks_phase14_completed_and_only_phase15_planned() {
+    let output = print_future_phases();
+    assert!(output.contains(
+        "Phase 13.0: Controlled Self-Modification Review Runtime status=completed_by_phase_13_0x"
+    ));
+    assert!(output
+        .contains("Phase 14.0: Trust + Workspace Recovery Gate status=completed_by_phase_14_0x"));
+    assert!(output.contains("Phase 15.0: EVA Runtime v1.0 Candidate status=planned"));
+    assert!(!output.contains("Phase 14.0: Trust + Workspace Recovery Gate status=planned"));
+    assert!(!output.contains("Stable Local Release Candidate Flow"));
+    assert!(!output.contains("Local CI Runner / Matrix Validation"));
+    assert!(!output.contains("External Repo Patch Dry-Run Runtime"));
+    assert!(!output.contains("Governance-backed PR Export"));
+    assert!(!output.contains("Controlled Daemon Mode"));
 }
 
 #[test]

@@ -35,38 +35,17 @@ pub fn build_future_phase_registry() -> FuturePhaseRegistry {
             },
             FuturePhaseEntry {
                 phase: "14.0".to_string(),
-                name: "Stable Local Release Candidate Flow".to_string(),
-                status: "planned".to_string(),
+                name: "Trust + Workspace Recovery Gate".to_string(),
+                status: "completed_by_phase_14_0x".to_string(),
                 allowed_now: false,
-                reason: "requires additional operator validation hardening".to_string(),
+                reason: "completed by the Phase 14.0X trust and recovery gate runtime".to_string(),
             },
             FuturePhaseEntry {
                 phase: "15.0".to_string(),
-                name: "Local CI Runner / Matrix Validation".to_string(),
+                name: "EVA Runtime v1.0 Candidate".to_string(),
                 status: "planned".to_string(),
                 allowed_now: false,
-                reason: "requires stable local release candidate flow first".to_string(),
-            },
-            FuturePhaseEntry {
-                phase: "16.0".to_string(),
-                name: "External Repo Patch Dry-Run Runtime".to_string(),
-                status: "planned".to_string(),
-                allowed_now: false,
-                reason: "requires richer external patch validation metadata".to_string(),
-            },
-            FuturePhaseEntry {
-                phase: "17.0".to_string(),
-                name: "Governance-backed PR Export".to_string(),
-                status: "planned".to_string(),
-                allowed_now: false,
-                reason: "requires stronger release package/operator workflow evidence".to_string(),
-            },
-            FuturePhaseEntry {
-                phase: "18.0".to_string(),
-                name: "Controlled Daemon Mode".to_string(),
-                status: "planned".to_string(),
-                allowed_now: false,
-                reason: "requires bounded operator service proofs and release stability"
+                reason: "requires a stable completed trust and workspace recovery gate first"
                     .to_string(),
             },
         ],
