@@ -14,7 +14,7 @@ pub fn inspect_workspace(
         inspection_id: id("inspection"),
         generated_at: now_unix(),
         repo_root: root.display().to_string(),
-        git_status: git_stdout(root),
+        git_status: detect_git_status(root),
         branch: git_stdout(root, &["branch", "--show-current"]),
         head: git_stdout(root, &["rev-parse", "HEAD"]),
         language: if cargo_toml_exists {
