@@ -24,6 +24,7 @@ pub mod proof_snapshot;
 pub mod recombined_hypothesis;
 pub mod recovery_manifest;
 pub mod release_bundle;
+pub mod release_candidate;
 pub mod release_health;
 pub mod release_ledger;
 pub mod release_manifest;
@@ -40,6 +41,7 @@ pub mod task_adjustment;
 pub mod task_contract;
 pub mod trust_decision;
 pub mod trust_proof_report;
+pub mod tui;
 pub mod validation;
 pub mod workspace_snapshot;
 
@@ -63,12 +65,15 @@ pub use operator_console::OperatorConsoleReport;
 pub use pr_package::PrPackage;
 pub use preflight_gate::PreflightGateReport;
 pub use preflight_gate_v3::PreflightGateV3Report;
-pub use promotion_queue::{PromotionQueue, PromotionQueueItem};
+pub use promotion_queue::{
+    CandidateQueueSummary, CandidateState, PromotionQueue, PromotionQueueItem,
+};
 pub use proof_report::ProofReport;
 pub use proof_snapshot::ProofSnapshot;
 pub use recombined_hypothesis::RecombinedHypothesis;
 pub use recovery_manifest::RecoveryManifest;
 pub use release_bundle::{ReleaseBundle, ReleasePreflightReport};
+pub use release_candidate::{ReleaseCandidateApprovalReport, ReleaseCandidateState};
 pub use release_health::ReleaseHealthReport;
 pub use release_ledger::ReleaseLedgerRecord;
 pub use release_manifest::ReleaseManifest;
@@ -85,4 +90,7 @@ pub use task_adjustment::TaskAdjustment;
 pub use task_contract::{DeniedMutationKind, TaskContract};
 pub use trust_decision::TrustDecision;
 pub use trust_proof_report::TrustProofReport;
+pub use tui::{
+    TuiCandidateRow, TuiDashboardState, TuiMetricsState, TuiReleaseState, TuiRunRow, TuiState,
+};
 pub use workspace_snapshot::WorkspaceSnapshot;

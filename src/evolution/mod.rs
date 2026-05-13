@@ -42,6 +42,7 @@ pub mod recombination;
 pub mod recovery_manifest;
 pub mod regression_memory;
 pub mod release_bundle;
+pub mod release_candidate;
 pub mod release_health;
 pub mod release_ledger;
 pub mod release_preflight;
@@ -130,7 +131,8 @@ pub use hypothesis::{rank_plans, EvolutionHypothesis};
 pub use learning_context::LearningContext;
 pub use memory::{record_evolution, CandidateSummary, ReplayResult};
 pub use metrics::{
-    learning_summary, load_metrics, refresh_metrics, update_metrics_after_log, EvolutionMetrics,
+    classify_run_outcome, learning_summary, load_metrics, refresh_metrics,
+    update_metrics_after_log, EvolutionMetrics, EvolutionRunOutcome,
 };
 pub use mutation_portfolio::{
     ensure_portfolio, kind_label as portfolio_kind_label, load_portfolio, print_portfolio,
@@ -174,6 +176,9 @@ pub use release_bundle::{
     build_release_bundle, latest_release_id, list_releases, print_last_release,
     print_release_bundle_json, print_release_changelog, print_release_manifest,
     print_release_status, print_rollback_manifest, release_count,
+};
+pub use release_candidate::{
+    approve_release_candidate, build_release_candidate_state, print_release_approve,
 };
 pub use release_health::{build_release_health, print_release_health, print_release_health_json};
 pub use release_ledger::{

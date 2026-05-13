@@ -123,3 +123,24 @@ cargo run --bin benchmark_batch
 
 Будущий origin:
 - `https://github.com/peccatos/eva-brain-repo`
+# EVA Operator Runtime
+
+Read-only operator dashboard:
+
+```bash
+cargo run -- tui
+```
+
+Current runtime validation:
+
+```bash
+cargo run -- status
+```
+
+Phase 15.1X to 15.5X focuses on visibility, truthful metrics, candidate queue hygiene, governed release candidate metadata, and the v1.0 green gate. See:
+
+- `docs/runtime_tui.md`
+- `docs/metrics_semantics.md`
+- `docs/candidate_queue.md`
+- `docs/release_candidate_flow.md`
+- `docs/phase_15x_status.md`

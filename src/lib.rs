@@ -18,6 +18,7 @@ pub mod runtime_daemon;
 pub mod sandbox;
 pub mod tool_contract;
 pub mod tool_executor;
+pub mod tui;
 
 pub use benchmark_case_loader::BenchmarkCaseLoader;
 pub use benchmark_contract::{
@@ -28,33 +29,37 @@ pub use benchmark_metrics::{BenchmarkAggregateMetrics, BenchmarkCaseMetrics};
 pub use benchmark_report::{BenchmarkBatchReport, DEFAULT_BATCH_REPORT_PATH};
 pub use benchmark_runner::BenchmarkRunner;
 pub use contracts::{
-    ApprovalStatus, ArtifactAuditReport, CapabilityPolicy, CommandResult, CorpusIngestContract,
-    DeniedMutationKind, DeterminismAuditReport, EvidenceBundle, EvolutionLogEntry, EvolutionReport,
-    ExternalPatchPackage, FinalRcReport, FuturePhaseEntry, FuturePhaseRegistry, GovernanceStatus,
-    GovernanceTrustGate, MutationContract, MutationKind, MutationObjective, MutationPlan,
-    OperationsReport, OperatorApprovalRecord, OperatorConsoleReport, PrPackage,
-    PreflightGateReport, PreflightGateV3Report, PromotionQueue, PromotionQueueItem, ProofReport,
-    ProofSnapshot, RecombinedHypothesis, RecoveryManifest, ReleaseBundle, ReleaseHealthReport,
-    ReleaseLedgerRecord, ReleaseManifest, ReleasePreflightReport, ReleaseProposal,
-    ReleaseProposalItem, RollbackManifest, RuntimeCandidateManifest, RuntimeCliCommandContract,
-    RuntimeCliContractReport, RuntimeServiceMetadata, RuntimeValidation, SandboxResult,
-    SelfReviewPackage, SupervisedRun, TaskAdjustment, TaskContract, TrustDecision,
-    TrustProofReport, ValidationStatus, WorkspaceSnapshot,
+    ApprovalStatus, ArtifactAuditReport, CandidateQueueSummary, CandidateState, CapabilityPolicy,
+    CommandResult, CorpusIngestContract, DeniedMutationKind, DeterminismAuditReport,
+    EvidenceBundle, EvolutionLogEntry, EvolutionReport, EvolutionStatus, ExternalPatchPackage,
+    FinalRcReport, FuturePhaseEntry, FuturePhaseRegistry, GovernanceStatus, GovernanceTrustGate,
+    MutationContract, MutationKind, MutationObjective, MutationPlan, OperationsReport,
+    OperatorApprovalRecord, OperatorConsoleReport, PrPackage, PreflightGateReport,
+    PreflightGateV3Report, PromotionQueue, PromotionQueueItem, ProofReport, ProofSnapshot,
+    RecombinedHypothesis, RecoveryManifest, ReleaseBundle, ReleaseCandidateApprovalReport,
+    ReleaseCandidateState, ReleaseHealthReport, ReleaseLedgerRecord, ReleaseManifest,
+    ReleasePreflightReport, ReleaseProposal, ReleaseProposalItem, RollbackManifest,
+    RuntimeCandidateManifest, RuntimeCliCommandContract, RuntimeCliContractReport,
+    RuntimeServiceMetadata, RuntimeValidation, SandboxResult, SelfReviewPackage, SupervisedRun,
+    TaskAdjustment, TaskContract, TrustDecision, TrustProofReport, TuiCandidateRow,
+    TuiDashboardState, TuiMetricsState, TuiReleaseState, TuiRunRow, TuiState, ValidationStatus,
+    WorkspaceSnapshot,
 };
 pub use evolution::{
     adjust_task_from_campaign, apply_mutation, approval_log, approval_status, approve_candidate,
-    autonomy_status, build_artifact_audit, build_capability_policy, build_determinism_audit,
-    build_evidence_bundle, build_external_patch_package, build_final_rc_report,
-    build_future_phase_registry, build_operations_report, build_operator_console_report,
-    build_pr_package, build_preflight_gate, build_preflight_gate_v3, build_proof_report,
-    build_proof_snapshot, build_recovery_manifest, build_release_bundle, build_release_health,
-    build_release_preflight, build_release_proposal, build_runtime_candidate_manifest,
-    build_runtime_cli_contract, build_runtime_service_metadata, build_runtime_validation,
-    build_self_review_package, build_trust_decision, build_trust_proof_report,
-    build_workspace_snapshot, candidate_lifecycle, classify_mutation_kind,
-    classify_mutation_kind_label, compute_quality_for_hypothesis, compute_quality_for_run,
-    count_sandbox_leaks, default_corpus_contract, defer_candidate, distill_patterns,
-    ensure_portfolio, evaluate_runtime_validation, fix_generated_test_names, generate_from_plan,
+    approve_release_candidate, autonomy_status, build_artifact_audit, build_capability_policy,
+    build_determinism_audit, build_evidence_bundle, build_external_patch_package,
+    build_final_rc_report, build_future_phase_registry, build_operations_report,
+    build_operator_console_report, build_pr_package, build_preflight_gate, build_preflight_gate_v3,
+    build_proof_report, build_proof_snapshot, build_recovery_manifest, build_release_bundle,
+    build_release_candidate_state, build_release_health, build_release_preflight,
+    build_release_proposal, build_runtime_candidate_manifest, build_runtime_cli_contract,
+    build_runtime_service_metadata, build_runtime_validation, build_self_review_package,
+    build_trust_decision, build_trust_proof_report, build_workspace_snapshot, candidate_lifecycle,
+    classify_mutation_kind, classify_mutation_kind_label, classify_run_outcome,
+    compute_quality_for_hypothesis, compute_quality_for_run, count_sandbox_leaks,
+    default_corpus_contract, defer_candidate, distill_patterns, ensure_portfolio,
+    evaluate_runtime_validation, fix_generated_test_names, generate_from_plan,
     generate_from_recombined_hypothesis, generate_safe_mutation, governance_status,
     governance_trust_gate, ingest_corpus, latest_corpus_id, latest_proof_snapshot_id,
     latest_record_for_run, latest_release_id, latest_supervised_run_id, learning_summary,
@@ -77,8 +82,8 @@ pub use evolution::{
     print_ops_status, print_portfolio, print_preflight_gate, print_preflight_gate_json,
     print_preflight_gate_v3, print_promotion_queue, print_proof_json, print_proof_report,
     print_proof_snapshot, print_proof_snapshot_json, print_quality_report,
-    print_record_release_attempt, print_release_bundle_json, print_release_changelog,
-    print_release_health, print_release_health_json, print_release_ledger,
+    print_record_release_attempt, print_release_approve, print_release_bundle_json,
+    print_release_changelog, print_release_health, print_release_health_json, print_release_ledger,
     print_release_ledger_json, print_release_manifest, print_release_preflight_json,
     print_release_proposal, print_release_proposal_json, print_release_status, print_report,
     print_rollback_manifest, print_runtime_candidate, print_runtime_cli_contract,
@@ -97,9 +102,9 @@ pub use evolution::{
     validate_mutation, validate_task_contract, write_report, AutonomyStatus, BoundedRunSummary,
     CampaignBlockerCount, CampaignRecombinationDiagnostics, CampaignRecombinationPreview,
     CorpusPatterns, CorpusSummary, DistilledPatternSummary, EvolutionBenchmark, EvolutionCampaign,
-    EvolutionHypothesis, EvolutionMetrics, EvolutionPolicy, EvolutionScore, HygieneReport,
-    LearningContext, MutationClass, MutationPortfolio, MutationPortfolioEntry, PolicyFeedback,
-    QualityMetricsV2, StrategyPortfolio, StrategyPortfolioEntry,
+    EvolutionHypothesis, EvolutionMetrics, EvolutionPolicy, EvolutionRunOutcome, EvolutionScore,
+    HygieneReport, LearningContext, MutationClass, MutationPortfolio, MutationPortfolioEntry,
+    PolicyFeedback, QualityMetricsV2, StrategyPortfolio, StrategyPortfolioEntry,
 };
 pub use github_tool_contract::{DiscoveryConfig, GithubRepositorySummary, GithubSearchFixture};
 pub use github_tool_executor::GithubToolExecutor;
@@ -145,3 +150,4 @@ pub use sandbox::{
 };
 pub use tool_contract::{CommandOutput, ToolRequest, ToolResponse};
 pub use tool_executor::ToolExecutor;
+pub use tui::{format_unknown, load_tui_state, run_tui};

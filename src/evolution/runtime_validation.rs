@@ -6,8 +6,9 @@ use crate::contracts::{
 };
 use crate::evolution::{
     build_artifact_audit, build_capability_policy, build_determinism_audit,
-    build_preflight_gate_v3, build_proof_report, build_release_health, build_workspace_snapshot,
-    governance_status, memory,
+    build_preflight_gate_v3, build_proof_report, build_release_candidate_state,
+    build_release_health, build_workspace_snapshot, governance_status, load_metrics,
+    load_or_refresh_promotion_queue, memory,
 };
 
 pub fn build_runtime_validation(
@@ -22,7 +23,7 @@ pub fn build_runtime_validation(
     let determinism = build_determinism_audit(project_root, memory_root)?;
     let gate_v3 = build_preflight_gate_v3(project_root, memory_root)?;
     let snapshot = build_workspace_snapshot(project_root, memory_root)?;
-    let validation = evaluate_runtime_validation(
+    let mut validation = evaluate_runtime_validation(
         memory::now_unix(),
         &policy,
         &governance,
@@ -33,6 +34,7 @@ pub fn build_runtime_validation(
         &gate_v3,
         &snapshot,
     );
+    apply_green_gate_details(project_root, memory_root, &mut validation)?;
     write_runtime_validation(memory_root, &validation)?;
     Ok(validation)
 }
@@ -190,8 +192,152 @@ pub fn evaluate_runtime_validation(
         warnings,
         checks,
         next_actions,
+        green_conditions: Vec::new(),
+        missing_green_conditions: Vec::new(),
+        approved_release_candidate: None,
+        release_bundle: None,
+        metrics_summary: String::new(),
+        candidate_queue_summary: String::new(),
+        sandbox_state: String::new(),
         auto_promote: false,
         operator_approval_required: true,
+    }
+}
+
+fn apply_green_gate_details(
+    project_root: &str,
+    memory_root: &str,
+    validation: &mut RuntimeValidation,
+) -> Result<(), String> {
+    let release_candidate = build_release_candidate_state(project_root, memory_root)?;
+    let metrics = load_metrics(memory_root)?;
+    let queue = load_or_refresh_promotion_queue(project_root, memory_root)?;
+    let mut green_conditions = Vec::new();
+    let mut missing = Vec::new();
+
+    check_condition(
+        &mut green_conditions,
+        &mut missing,
+        release_candidate.approved_release_candidate.is_some(),
+        "approved_release_candidate",
+    );
+    check_condition(
+        &mut green_conditions,
+        &mut missing,
+        release_candidate.release_bundle_exists,
+        "release_bundle_exists",
+    );
+    check_condition(
+        &mut green_conditions,
+        &mut missing,
+        release_candidate.preflight_gate_v3 == "pass",
+        "preflight_gate_v3_pass",
+    );
+    check_condition(
+        &mut green_conditions,
+        &mut missing,
+        release_candidate.release_health == "green",
+        "release_health_green",
+    );
+    check_condition(
+        &mut green_conditions,
+        &mut missing,
+        validation.sandbox_state != "leaked",
+        "sandbox_leaks_zero",
+    );
+    check_condition(
+        &mut green_conditions,
+        &mut missing,
+        metrics.failed_runs
+            == metrics.real_execution_failed_runs
+                + metrics.cargo_gate_failed_runs
+                + metrics.replay_failed_runs,
+        "metrics_semantics_correct",
+    );
+    check_condition(
+        &mut green_conditions,
+        &mut missing,
+        queue.summary.ready_candidates > 0 || release_candidate.operator_approved,
+        "candidate_queue_has_ready_or_approved_candidate",
+    );
+    check_condition(
+        &mut green_conditions,
+        &mut missing,
+        validation.blockers.is_empty(),
+        "no_critical_blockers",
+    );
+    check_condition(
+        &mut green_conditions,
+        &mut missing,
+        release_candidate.operator_approval_required,
+        "operator_approval_required",
+    );
+    check_condition(
+        &mut green_conditions,
+        &mut missing,
+        release_candidate.operator_approved,
+        "operator_approved",
+    );
+
+    validation.approved_release_candidate = release_candidate.approved_release_candidate;
+    validation.release_bundle = release_candidate.latest_release_bundle;
+    validation.metrics_summary = format!(
+        "total_runs={} passed={} failed={} safety_rejected={} duplicate_rejected={}",
+        metrics.total_runs,
+        metrics.passed_runs,
+        metrics.failed_runs,
+        metrics.safety_rejected_runs,
+        metrics.duplicate_rejected_runs
+    );
+    validation.candidate_queue_summary = format!(
+        "candidate_count={} ready={} blocked={} quarantined={} legacy={} duplicate={} unreplayable={} already_promoted={}",
+        queue.summary.candidate_count,
+        queue.summary.ready_candidates,
+        queue.items.len().saturating_sub(queue.summary.ready_candidates),
+        queue.summary.quarantined_candidates,
+        queue.summary.legacy_candidates,
+        queue.summary.duplicate_candidates,
+        queue.summary.unreplayable_candidates,
+        queue.summary.already_promoted_candidates
+    );
+    validation.sandbox_state = if validation
+        .blockers
+        .iter()
+        .any(|blocker| blocker.contains("sandbox"))
+    {
+        "leaked".to_string()
+    } else {
+        "clean".to_string()
+    };
+    validation.green_conditions = green_conditions;
+    validation.missing_green_conditions = missing.clone();
+    for item in missing {
+        if !validation.warnings.contains(&item) {
+            validation.warnings.push(item);
+        }
+    }
+    validation.warnings.sort();
+    validation.warnings.dedup();
+    validation.status = if !validation.blockers.is_empty() {
+        "blocked".to_string()
+    } else if validation.missing_green_conditions.is_empty() {
+        "green".to_string()
+    } else {
+        "warn".to_string()
+    };
+    Ok(())
+}
+
+fn check_condition(
+    green_conditions: &mut Vec<String>,
+    missing: &mut Vec<String>,
+    ok: bool,
+    label: &str,
+) {
+    if ok {
+        green_conditions.push(label.to_string());
+    } else {
+        missing.push(label.to_string());
     }
 }
 
