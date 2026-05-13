@@ -236,8 +236,19 @@ fn render_agent(state: &TuiState, output: &mut String) {
     let agent = &state.agent;
     output.push_str("Agent Readiness\n");
     output.push_str(&format!(
-        "production_agent_v1_ready={} validation={} validation_id={}\n",
-        agent.production_agent_v1_ready, agent.latest_validation_status, agent.latest_validation_id
+        "production_agent_v1_ready={} production_agent_v2_ready={} validation={} validation_id={}\n",
+        agent.production_agent_v1_ready,
+        agent.production_agent_v2_ready,
+        agent.latest_validation_status,
+        agent.latest_validation_id
+    ));
+    output.push_str(&format!(
+        "repo_map_modules={} task_outcomes={} patterns={} fitness={} self_improvement={}\n",
+        agent.repo_map_modules,
+        agent.task_outcome_count,
+        agent.pattern_count,
+        agent.fitness_count,
+        agent.latest_self_improvement_status
     ));
     output.push_str(&format!(
         "missing_components={}\n",

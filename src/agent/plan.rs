@@ -1,4 +1,5 @@
 use crate::agent::inspect::inspect_workspace;
+use crate::agent::repo_map::build_repo_map;
 use crate::agent::storage::{id, memory_path, now_unix, save_json_pretty};
 use crate::agent::task::{load_task, update_task};
 use crate::contracts::{AgentPlan, AgentTaskStatus, PlanStep};
@@ -10,6 +11,7 @@ pub fn plan_task(
 ) -> Result<AgentPlan, String> {
     let mut task = load_task(memory_root, task_id)?;
     let inspection = inspect_workspace(project_root, memory_root)?;
+    let repo_map = build_repo_map(project_root, memory_root)?;
     let plan = AgentPlan {
         plan_id: id("plan"),
         task_id: task_id.to_string(),
@@ -18,7 +20,7 @@ pub fn plan_task(
         planner: "rule_based".into(),
         llm_used: false,
         steps: default_steps(),
-        likely_files: likely_files(&task.goal),
+        likely_files: likely_files_with_repo_map(&task.goal, &repo_map),
         forbidden_paths: task.forbidden_paths.clone(),
         risk_level: task.risk_level.clone(),
         approval_required: true,
@@ -106,15 +108,33 @@ pub fn default_steps() -> Vec<PlanStep> {
 }
 
 pub fn likely_files(goal: &str) -> Vec<String> {
+    likely_files_with_repo_map(goal, &crate::contracts::RepoMap::default())
+}
+
+pub fn likely_files_with_repo_map(goal: &str, repo_map: &crate::contracts::RepoMap) -> Vec<String> {
     let lower = goal.to_ascii_lowercase();
     if lower.contains("test") || lower.contains("провер") {
-        vec!["tests/".into()]
+        if repo_map.tests.is_empty() {
+            vec!["tests/".into()]
+        } else {
+            repo_map.tests.iter().take(3).cloned().collect()
+        }
     } else if lower.contains("doc")
         || lower.contains("readme")
         || lower.contains("опис")
         || lower.contains("док")
     {
-        vec!["docs/".into(), "README.md".into()]
+        let mut files = repo_map.docs.iter().take(3).cloned().collect::<Vec<_>>();
+        if files.is_empty() {
+            files = vec!["docs/".into(), "README.md".into()];
+        }
+        files
+    } else if lower.contains("cli") || lower.contains("command") || lower.contains("команд") {
+        vec![
+            "src/main.rs".into(),
+            "src/agent/".into(),
+            "tests/production_agent_phase16_17_tests.rs".into(),
+        ]
     } else {
         vec!["docs/".into()]
     }

@@ -81,3 +81,10 @@ memory/validations/
 memory/pr_summaries/
 memory/agent/
 memory/specimens/
+memory/repo_map/
+memory/task_outcomes/
+memory/outcome_analysis/
+memory/patterns/
+memory/strategy_memory/
+memory/fitness/
+memory/self_improvement/

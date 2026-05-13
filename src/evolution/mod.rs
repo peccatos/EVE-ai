@@ -1,3 +1,4 @@
+pub mod agent_patterns;
 pub mod artifact_audit;
 pub mod autonomy;
 pub mod benchmark;
@@ -31,6 +32,7 @@ pub mod operations;
 pub mod operator_approval;
 pub mod operator_console;
 pub mod operator_runbook;
+pub mod outcome_analyzer;
 pub mod patterns;
 pub mod policy_feedback;
 pub mod preflight_gate;
@@ -55,19 +57,24 @@ pub mod runtime_cli_contract;
 pub mod runtime_service;
 pub mod runtime_validation;
 pub mod scorer;
+pub mod self_improvement;
 pub mod self_review;
 pub mod strategy_portfolio;
+pub mod strategy_selection;
 pub mod strategy_task_suggester;
 pub mod success_memory;
 pub mod supervisor;
+pub mod task_strategy_memory;
 pub mod task_validator;
 pub mod task_yield;
 pub mod templates;
 pub mod trust_decision;
 pub mod trust_proof_report;
 pub mod validator;
+pub mod work_fitness;
 pub mod workspace_snapshot;
 
+pub use agent_patterns::{build_agent_patterns, print_patterns};
 pub use artifact_audit::{build_artifact_audit, print_artifact_audit, print_artifact_audit_json};
 pub use autonomy::{autonomy_status, AutonomyStatus};
 pub use benchmark::{
@@ -149,6 +156,7 @@ pub use operator_approval::{
 };
 pub use operator_console::{build_operator_console_report, print_operator_console};
 pub use operator_runbook::print_operator_runbook;
+pub use outcome_analyzer::{build_task_outcome_analysis, print_outcome_analyze};
 pub use patterns::{distill_patterns, DistilledPatternSummary};
 pub use policy_feedback::{load_policy_feedback, update_policy_feedback, PolicyFeedback};
 pub use preflight_gate::{build_preflight_gate, print_preflight_gate, print_preflight_gate_json};
@@ -206,6 +214,7 @@ pub use runtime_validation::{
     load_or_build_runtime_validation, print_runtime_validation,
 };
 pub use scorer::{score_cycle, EvolutionScore};
+pub use self_improvement::{print_self_improve_propose, propose_self_improvement};
 pub use self_review::{
     build_self_review_package, list_self_review_packages, print_last_self_review_package,
 };
@@ -213,12 +222,14 @@ pub use strategy_portfolio::{
     ensure_strategy_portfolio, infer_strategy, load_strategy_portfolio, print_strategy_portfolio,
     refresh_strategy_portfolio, StrategyPortfolio, StrategyPortfolioEntry,
 };
+pub use strategy_selection::{print_strategy_select, select_strategy};
 pub use strategy_task_suggester::{list_suggested_tasks, suggest_strategy_tasks};
 pub use success_memory::{load_success_patterns, record_success_pattern, SuccessPatternEntry};
 pub use supervisor::{
     latest_supervised_run_id, list_supervised_runs, print_last_supervised_run,
     print_supervised_run_report, supervise_task,
 };
+pub use task_strategy_memory::{build_task_strategy_memory, classify_goal, print_strategy_memory};
 pub use task_validator::{
     load_stored_task_contract, load_task_contract, matches_target_patterns, store_task_contract,
     validate_task_contract,
@@ -228,6 +239,7 @@ pub use templates::normalized_generated_test_name;
 pub use trust_decision::{build_trust_decision, print_trust_decision};
 pub use trust_proof_report::{build_trust_proof_report, print_trust_proof_report};
 pub use validator::validate_mutation;
+pub use work_fitness::{build_fitness, print_fitness, score_task_outcome};
 pub use workspace_snapshot::{
     build_workspace_snapshot, latest_workspace_snapshot_id, list_workspace_snapshots,
     print_last_workspace_snapshot,

@@ -183,6 +183,18 @@ pub struct TuiAgentState {
     #[serde(default)]
     pub production_agent_v1_ready: bool,
     #[serde(default)]
+    pub production_agent_v2_ready: bool,
+    #[serde(default)]
+    pub repo_map_modules: usize,
+    #[serde(default)]
+    pub task_outcome_count: usize,
+    #[serde(default)]
+    pub pattern_count: usize,
+    #[serde(default)]
+    pub fitness_count: usize,
+    #[serde(default)]
+    pub latest_self_improvement_status: String,
+    #[serde(default)]
     pub readiness_blockers: Vec<String>,
 }
 

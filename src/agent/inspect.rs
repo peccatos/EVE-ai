@@ -80,7 +80,7 @@ pub fn print_workspace_inspection(project_root: &str, memory_root: &str) -> Resu
         "EVA Workspace Inspection\nlanguage={}\ncargo_project={}\ngit_status={}\nbranch={}\nhead={}\nentrypoints={}\nrisk_zones={}",
         inspection.language,
         inspection.cargo_project,
-        if inspection.git_status.trim().is_empty() { "clean" } else { "dirty" },
+        inspection.git_status,
         inspection.branch.as_deref().unwrap_or("unknown"),
         inspection.head.as_deref().unwrap_or("unknown"),
         inspection.entrypoints.join(","),

@@ -10,28 +10,31 @@ use eva_runtime_with_task_validator::{
     list_external_patch_packages, list_pr_packages, list_recovery_manifests, list_releases,
     list_self_review_packages, list_suggested_tasks, list_supervised_runs,
     list_workspace_snapshots, load_corpus_summary, load_metrics, preview_campaign_recombination,
-    print_agent_readiness, print_agent_report, print_apply_proposal, print_approve_proposal,
-    print_artifact_audit, print_artifact_audit_json, print_benchmark, print_bounded_run_report,
-    print_campaign, print_campaign_report, print_capability_policy, print_create_task,
-    print_determinism_audit, print_determinism_audit_json, print_eva_status,
-    print_evolution_policy, print_final_rc_report, print_future_phases, print_future_phases_json,
-    print_hygiene_plan, print_hygiene_report, print_last_bounded_run, print_last_campaign_report,
+    print_agent_readiness, print_agent_report, print_agent_v2_readiness, print_apply_dry_run,
+    print_apply_proposal, print_approve_proposal, print_artifact_audit, print_artifact_audit_json,
+    print_benchmark, print_bounded_run_report, print_campaign, print_campaign_report,
+    print_capability_policy, print_create_task, print_determinism_audit,
+    print_determinism_audit_json, print_eva_status, print_evolution_policy, print_final_rc_report,
+    print_fitness, print_future_phases, print_future_phases_json, print_hygiene_plan,
+    print_hygiene_report, print_last_bounded_run, print_last_campaign_report,
     print_last_evidence_bundle, print_last_external_patch_package, print_last_pr_package,
     print_last_recovery_manifest, print_last_release, print_last_report,
     print_last_self_review_package, print_last_supervised_run, print_last_task_adjustment,
     print_last_workspace_snapshot, print_operator_console, print_operator_runbook, print_ops_json,
-    print_ops_status, print_plan_task, print_portfolio, print_pr_summary_for_task,
-    print_preflight_gate, print_preflight_gate_json, print_preflight_gate_v3,
-    print_promotion_queue, print_proof_json, print_proof_report, print_proof_snapshot,
-    print_proof_snapshot_json, print_propose_task, print_quality_report,
-    print_record_release_attempt, print_release_approve, print_release_bundle_json,
-    print_release_changelog, print_release_health, print_release_health_json, print_release_ledger,
-    print_release_ledger_json, print_release_manifest, print_release_preflight_json,
-    print_release_proposal, print_release_proposal_json, print_release_status, print_report,
+    print_ops_status, print_outcome_analyze, print_patterns, print_plan_task, print_portfolio,
+    print_pr_summary_for_task, print_preflight_gate, print_preflight_gate_json,
+    print_preflight_gate_v3, print_promotion_queue, print_proof_json, print_proof_report,
+    print_proof_snapshot, print_proof_snapshot_json, print_proposal_show, print_propose_task,
+    print_quality_report, print_record_release_attempt, print_release_approve,
+    print_release_bundle_json, print_release_changelog, print_release_health,
+    print_release_health_json, print_release_ledger, print_release_ledger_json,
+    print_release_manifest, print_release_preflight_json, print_release_proposal,
+    print_release_proposal_json, print_release_status, print_repo_map, print_report,
     print_rollback_manifest, print_runtime_candidate, print_runtime_cli_contract,
-    print_runtime_service, print_runtime_validation, print_show_task, print_specimen_add,
-    print_specimen_list, print_strategy_portfolio, print_supervised_run_report, print_tasks,
-    print_trust_decision, print_trust_proof_report, print_validation_run,
+    print_runtime_service, print_runtime_validation, print_self_improve_propose, print_show_task,
+    print_specimen_add, print_specimen_list, print_strategy_memory, print_strategy_portfolio,
+    print_strategy_select, print_supervised_run_report, print_task_outcome, print_task_outcomes,
+    print_tasks, print_trust_decision, print_trust_proof_report, print_validation_run,
     print_workspace_inspection, promote_approved_candidate, promote_candidate,
     promotion_blocked_items, promotion_ready_approved, promotion_ready_items, refresh_metrics,
     refresh_portfolio, refresh_promotion_queue, refresh_report, refresh_strategy_portfolio,
@@ -1523,12 +1526,22 @@ fn handle_agent_cli(args: &[String]) -> Option<Result<String, String>> {
         "tasks" | "--tasks" => Some(print_tasks("memory")),
         "task-show" | "--task-show" if args.len() == 2 => Some(print_show_task("memory", &args[1])),
         "inspect" | "--inspect" => Some(print_workspace_inspection(".", "memory")),
+        "repo-map" | "--repo-map" => Some(print_repo_map(".", "memory")),
         "plan" | "--plan" if args.len() == 2 => Some(print_plan_task(".", "memory", &args[1])),
         "propose" | "--propose" if args.len() == 2 => {
             Some(print_propose_task(".", "memory", &args[1]))
         }
+        "proposal-show" | "--proposal-show" if args.len() == 2 => {
+            Some(print_proposal_show("memory", &args[1]))
+        }
         "approve" | "--approve" if args.len() == 2 => {
             Some(print_approve_proposal("memory", &args[1]))
+        }
+        "apply" if args.len() == 3 && args[1] == "--dry-run" => {
+            Some(print_apply_dry_run(".", "memory", &args[2]))
+        }
+        "apply" if args.len() == 3 && args[2] == "--dry-run" => {
+            Some(print_apply_dry_run(".", "memory", &args[1]))
         }
         "apply" | "--apply" if args.len() == 2 => {
             Some(print_apply_proposal(".", "memory", &args[1]))
@@ -1539,7 +1552,23 @@ fn handle_agent_cli(args: &[String]) -> Option<Result<String, String>> {
             Some(print_pr_summary_for_task("memory", &args[1]))
         }
         "agent-readiness" | "--agent-readiness" => Some(print_agent_readiness("memory")),
+        "agent-v2-readiness" | "--agent-v2-readiness" => Some(print_agent_v2_readiness("memory")),
         "llm-health" | "--llm-health" => Some(Ok(llm_health())),
+        "task-outcomes" | "--task-outcomes" => Some(print_task_outcomes("memory")),
+        "task-outcome" | "--task-outcome" if args.len() == 2 => {
+            Some(print_task_outcome("memory", &args[1]))
+        }
+        "outcome-analyze" | "--outcome-analyze" => Some(print_outcome_analyze("memory")),
+        "patterns" | "--patterns" => Some(print_patterns("memory")),
+        "strategy-memory" | "--strategy-memory" => Some(print_strategy_memory("memory")),
+        "fitness" | "--fitness" if args.len() == 1 => Some(print_fitness("memory", None)),
+        "fitness" | "--fitness" if args.len() == 2 => Some(print_fitness("memory", Some(&args[1]))),
+        "strategy-select" | "--strategy-select" if args.len() >= 2 => {
+            Some(print_strategy_select("memory", &args[1..].join(" ")))
+        }
+        "self-improve" if args.len() == 2 && args[1] == "propose" => {
+            Some(print_self_improve_propose("memory"))
+        }
         "specimen" if args.len() == 4 && args[1] == "add" => {
             Some(print_specimen_add("memory", &args[2], &args[3]))
         }

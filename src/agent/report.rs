@@ -1,5 +1,6 @@
 use std::fs;
 
+use crate::agent::outcome::build_task_outcome;
 use crate::agent::storage::{id, load_json, memory_path, now_unix, save_json_pretty};
 use crate::agent::task::{load_task, update_task};
 use crate::contracts::{AgentReport, AgentTaskStatus, ApplyResult, ValidationRun};
@@ -53,6 +54,7 @@ pub fn build_agent_report(memory_root: &str, task_id: &str) -> Result<AgentRepor
     task.status = AgentTaskStatus::Reported;
     task.report_id = Some(report.report_id.clone());
     update_task(memory_root, task)?;
+    let _ = build_task_outcome(memory_root, task_id);
     Ok(report)
 }
 

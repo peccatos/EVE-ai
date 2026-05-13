@@ -1,10 +1,17 @@
+use crate::agent::outcome::build_task_outcome;
 use crate::agent::plan::plan_task;
 use crate::agent::safe_paths::validate_patch_path;
 use crate::agent::storage::{id, load_json, memory_path, now_unix, save_json_pretty};
 use crate::agent::task::{load_task, update_task};
 use crate::contracts::{
-    AgentTaskStatus, PatchOp, PatchOperationKind, PatchProposal, ProposalStatus,
+    AgentTaskStatus, LlmResponse, LlmStatus, PatchOp, PatchOperationKind, PatchProposal,
+    ProposalStatus,
 };
+
+pub const MAX_FILES_PER_PROPOSAL: usize = 5;
+pub const MAX_PATCH_OPS_PER_PROPOSAL: usize = 10;
+pub const MAX_CONTENT_PER_OP: usize = 20 * 1024;
+pub const MAX_TOTAL_PROPOSAL_CONTENT: usize = 80 * 1024;
 
 pub fn propose_task(
     project_root: &str,
@@ -98,21 +105,52 @@ pub fn propose_task(
     };
     task.proposal_id = Some(proposal.proposal_id.clone());
     update_task(memory_root, task)?;
+    if proposal.status == ProposalStatus::Refused {
+        let _ = build_task_outcome(memory_root, task_id);
+    }
     Ok(proposal)
 }
 
 pub fn validate_patch_proposal(proposal: &mut PatchProposal) {
+    if proposal.files_to_change.len() > MAX_FILES_PER_PROPOSAL
+        || proposal.patch_ops.len() > MAX_PATCH_OPS_PER_PROPOSAL
+    {
+        proposal.blockers.push("patch_too_large".to_string());
+    }
+    let mut total_content_size = 0usize;
     for op in &proposal.patch_ops {
         if let Err(error) = validate_patch_path(&op.path) {
             proposal.blockers.push(error.to_string());
         }
+        let content_size = op.content.as_ref().map(|value| value.len()).unwrap_or(0)
+            + op.find.as_ref().map(|value| value.len()).unwrap_or(0)
+            + op.replace.as_ref().map(|value| value.len()).unwrap_or(0);
+        total_content_size += content_size;
+        if content_size > MAX_CONTENT_PER_OP {
+            proposal.blockers.push("patch_too_large".to_string());
+        }
         if matches!(op.op, PatchOperationKind::ReplaceExactText)
-            && (op.find.is_none() || op.replace.is_none())
+            && (op.find.as_deref().unwrap_or_default().is_empty()
+                || op.replace.as_deref().unwrap_or_default().is_empty())
         {
             proposal
                 .blockers
                 .push(format!("invalid_replace_exact_text:{}", op.path));
         }
+        if matches!(
+            op.op,
+            PatchOperationKind::CreateFile
+                | PatchOperationKind::AppendFile
+                | PatchOperationKind::ReplaceFileIfExists
+        ) && op.content.is_none()
+        {
+            proposal
+                .blockers
+                .push(format!("missing_content:{}", op.path));
+        }
+    }
+    if total_content_size > MAX_TOTAL_PROPOSAL_CONTENT {
+        proposal.blockers.push("patch_too_large".to_string());
     }
     if proposal.approved && proposal.approved_at.is_none() {
         proposal.blockers.push("proposal_self_approved".into());
@@ -145,6 +183,134 @@ pub fn save_proposal(memory_root: &str, proposal: &PatchProposal) -> Result<(), 
     )
 }
 
+pub fn proposal_from_llm_response(
+    memory_root: &str,
+    task_id: &str,
+    plan_id: &str,
+    goal: &str,
+    response: &LlmResponse,
+) -> Result<PatchProposal, String> {
+    if response.status != LlmStatus::Completed {
+        return Err(format!("llm_status_not_completed:{:?}", response.status));
+    }
+    let value = response
+        .parsed_json
+        .clone()
+        .or_else(|| serde_json::from_str(&response.output_text).ok())
+        .ok_or_else(|| "malformed_llm_output".to_string())?;
+    let mut blockers = Vec::new();
+    if value.get("approved").and_then(|value| value.as_bool()) == Some(true)
+        || value.get("apply").is_some()
+        || value.get("shell_commands").is_some()
+    {
+        blockers.push("llm_attempted_gate_bypass".to_string());
+    }
+    let summary = value
+        .get("summary")
+        .and_then(|value| value.as_str())
+        .unwrap_or("Structured LLM patch proposal.")
+        .to_string();
+    let risk_level = value
+        .get("risk_level")
+        .and_then(|value| value.as_str())
+        .unwrap_or("low")
+        .to_string();
+    let files_to_change = value
+        .get("files_to_change")
+        .and_then(|value| value.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|value| value.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let patch_ops = value
+        .get("patch_ops")
+        .and_then(|value| value.as_array())
+        .ok_or_else(|| "malformed_llm_output".to_string())?
+        .iter()
+        .map(parse_patch_op)
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut proposal = PatchProposal {
+        proposal_id: id("proposal"),
+        task_id: task_id.to_string(),
+        plan_id: plan_id.to_string(),
+        status: ProposalStatus::AwaitingApproval,
+        created_at: now_unix(),
+        updated_at: now_unix(),
+        goal: goal.to_string(),
+        summary,
+        proposer: response.provider.clone(),
+        llm_used: response.provider != "rule_based",
+        files_to_change,
+        forbidden_paths: vec![
+            ".git/".to_string(),
+            "target/".to_string(),
+            "memory/".to_string(),
+            "releases/".to_string(),
+            "sandboxes/".to_string(),
+        ],
+        risk_level,
+        approval_required: true,
+        approved: false,
+        approved_at: None,
+        patch_ops,
+        warnings: response.warnings.clone(),
+        blockers,
+    };
+    if proposal.files_to_change.is_empty() {
+        proposal.files_to_change = proposal
+            .patch_ops
+            .iter()
+            .map(|op| op.path.clone())
+            .collect();
+    }
+    validate_patch_proposal(&mut proposal);
+    save_proposal(memory_root, &proposal)?;
+    Ok(proposal)
+}
+
+fn parse_patch_op(value: &serde_json::Value) -> Result<PatchOp, String> {
+    let path = value
+        .get("path")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| "malformed_llm_output:path".to_string())?
+        .to_string();
+    let op = match value
+        .get("op")
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+    {
+        "CreateFile" => PatchOperationKind::CreateFile,
+        "AppendFile" => PatchOperationKind::AppendFile,
+        "ReplaceFileIfExists" => PatchOperationKind::ReplaceFileIfExists,
+        "ReplaceExactText" => PatchOperationKind::ReplaceExactText,
+        _ => return Err("malformed_llm_output:op".to_string()),
+    };
+    Ok(PatchOp {
+        path,
+        op,
+        description: value
+            .get("description")
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string(),
+        content: value
+            .get("content")
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        find: value
+            .get("find")
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+        replace: value
+            .get("replace")
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
+    })
+}
+
 pub fn print_propose_task(
     project_root: &str,
     memory_root: &str,
@@ -171,4 +337,33 @@ pub fn print_propose_task(
         proposal.llm_used,
         proposal.files_to_change.join(",")
     ))
+}
+
+pub fn print_proposal_show(memory_root: &str, proposal_id: &str) -> Result<String, String> {
+    match load_proposal(memory_root, proposal_id) {
+        Ok(mut proposal) => {
+            validate_patch_proposal(&mut proposal);
+            Ok(format!(
+                "EVA Patch Proposal\nproposal_id={}\ntask_id={}\nstatus={:?}\nproposer={}\nllm_used={}\nrisk_level={}\napproval_required={}\napproved={}\nfiles_to_change={}\npatch_ops={}\nwarnings={}\nblockers={}",
+                proposal.proposal_id,
+                proposal.task_id,
+                proposal.status,
+                proposal.proposer,
+                proposal.llm_used,
+                proposal.risk_level,
+                proposal.approval_required,
+                proposal.approved,
+                proposal.files_to_change.join(","),
+                proposal
+                    .patch_ops
+                    .iter()
+                    .map(|op| format!("{}:{:?}", op.path, op.op))
+                    .collect::<Vec<_>>()
+                    .join(","),
+                if proposal.warnings.is_empty() { "none".to_string() } else { proposal.warnings.join(",") },
+                if proposal.blockers.is_empty() { "none".to_string() } else { proposal.blockers.join(",") }
+            ))
+        }
+        Err(_) => Ok(format!("proposal not found\nproposal_id={proposal_id}")),
+    }
 }

@@ -42,11 +42,20 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
   cargo run -- inspect
       Inspect the local workspace for the production-agent loop.
 
+  cargo run -- repo-map
+      Build a deterministic local repo map for agent planning.
+
   cargo run -- plan <TASK_ID>
       Create a deterministic agent plan.
 
   cargo run -- propose <TASK_ID>
       Create or refuse a structured patch proposal.
+
+  cargo run -- proposal-show <PROPOSAL_ID>
+      Print a structured proposal preview without applying it.
+
+  cargo run -- apply --dry-run <PROPOSAL_ID>
+      Preview safe apply without mutating files or creating snapshots.
 
   cargo run -- approve <PROPOSAL_ID>
       Operator-approve a safe proposal.
@@ -66,8 +75,25 @@ pub const RUNTIME_CLI_HELP: &str = r#"EVA runtime commands:
   cargo run -- agent-readiness
       Print production-agent readiness.
 
+  cargo run -- agent-v2-readiness
+      Print production-agent v2 readiness.
+
   cargo run -- llm-health
       Print LLM provider health without exposing secrets.
+
+  cargo run -- task-outcomes
+  cargo run -- task-outcome <TASK_ID>
+      Inspect real task outcome memory.
+
+  cargo run -- outcome-analyze
+  cargo run -- patterns
+  cargo run -- strategy-memory
+  cargo run -- fitness [TASK_ID]
+  cargo run -- strategy-select <GOAL>
+      Analyze outcomes, extract patterns, score fitness, and select safe strategies.
+
+  cargo run -- self-improve propose
+      Create a governed self-improvement proposal only; never apply automatically.
 
   cargo run -- --evolve
       Run one bounded self-evolution cycle in a disposable sandbox.
