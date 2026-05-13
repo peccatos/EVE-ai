@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::{fs, path::PathBuf};
 
 use crate::contracts::{
     ArtifactAuditReport, CapabilityPolicy, DeterminismAuditReport, GovernanceStatus,
@@ -37,6 +38,76 @@ pub fn build_runtime_validation(
     apply_green_gate_details(project_root, memory_root, &mut validation)?;
     write_runtime_validation(memory_root, &validation)?;
     Ok(validation)
+}
+
+pub fn load_latest_runtime_validation(
+    memory_root: &str,
+) -> Result<Option<RuntimeValidation>, String> {
+    let dir = Path::new(memory_root).join("runtime_validation");
+    if !dir.exists() {
+        return Ok(None);
+    }
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(&dir)
+        .map_err(|error| format!("failed to read runtime validation dir: {error}"))?
+    {
+        let entry =
+            entry.map_err(|error| format!("failed to read runtime validation entry: {error}"))?;
+        let path = entry.path();
+        if !path.extension().is_some_and(|ext| ext == "json") {
+            continue;
+        }
+        let contents = fs::read_to_string(&path)
+            .map_err(|error| format!("failed to read runtime validation: {error}"))?;
+        let validation: RuntimeValidation = serde_json::from_str(&contents)
+            .map_err(|error| format!("failed to parse runtime validation: {error}"))?;
+        entries.push((
+            validation.generated_at,
+            path,
+            sanitize_runtime_validation(validation),
+        ));
+    }
+    entries.sort_by(|left, right| {
+        left.0
+            .cmp(&right.0)
+            .then_with(|| file_label(&left.1).cmp(&file_label(&right.1)))
+    });
+    Ok(entries.pop().map(|(_, _, validation)| validation))
+}
+
+fn sanitize_runtime_validation(mut validation: RuntimeValidation) -> RuntimeValidation {
+    validation.warnings.retain(|warning| {
+        !validation
+            .missing_green_conditions
+            .iter()
+            .any(|missing| missing == warning)
+    });
+    validation.warnings.sort();
+    validation.warnings.dedup();
+    validation.blockers.sort();
+    validation.blockers.dedup();
+    validation.green_conditions.sort();
+    validation.green_conditions.dedup();
+    validation.missing_green_conditions.sort();
+    validation.missing_green_conditions.dedup();
+    validation.status = if !validation.blockers.is_empty() {
+        "blocked".to_string()
+    } else if validation.missing_green_conditions.is_empty() && validation.warnings.is_empty() {
+        "green".to_string()
+    } else {
+        "warn".to_string()
+    };
+    validation
+}
+
+pub fn load_or_build_runtime_validation(
+    project_root: &str,
+    memory_root: &str,
+) -> Result<RuntimeValidation, String> {
+    if let Some(validation) = load_latest_runtime_validation(memory_root)? {
+        return Ok(validation);
+    }
+    build_runtime_validation(project_root, memory_root)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -278,6 +349,18 @@ fn apply_green_gate_details(
         release_candidate.operator_approved,
         "operator_approved",
     );
+    let replay_ok_for_approved = release_candidate
+        .approved_release_candidate
+        .as_ref()
+        .and_then(|run_id| queue.items.iter().find(|item| &item.run_id == run_id))
+        .map(|item| item.replay_status == "ok" || item.replay_status == "passed")
+        .unwrap_or(false);
+    check_condition(
+        &mut green_conditions,
+        &mut missing,
+        replay_ok_for_approved,
+        "replay_status_for_approved_candidate",
+    );
 
     validation.approved_release_candidate = release_candidate.approved_release_candidate;
     validation.release_bundle = release_candidate.latest_release_bundle;
@@ -310,12 +393,7 @@ fn apply_green_gate_details(
         "clean".to_string()
     };
     validation.green_conditions = green_conditions;
-    validation.missing_green_conditions = missing.clone();
-    for item in missing {
-        if !validation.warnings.contains(&item) {
-            validation.warnings.push(item);
-        }
-    }
+    validation.missing_green_conditions = missing;
     validation.warnings.sort();
     validation.warnings.dedup();
     validation.status = if !validation.blockers.is_empty() {
@@ -342,8 +420,11 @@ fn check_condition(
 }
 
 pub fn print_runtime_validation(project_root: &str, memory_root: &str) -> Result<String, String> {
-    serde_json::to_string_pretty(&build_runtime_validation(project_root, memory_root)?)
-        .map_err(|error| format!("failed to serialize runtime validation: {error}"))
+    serde_json::to_string_pretty(&load_or_build_runtime_validation(
+        project_root,
+        memory_root,
+    )?)
+    .map_err(|error| format!("failed to serialize runtime validation: {error}"))
 }
 
 fn write_runtime_validation(
@@ -356,6 +437,13 @@ fn write_runtime_validation(
             .join(format!("{}.json", validation.validation_id)),
         validation,
     )
+}
+
+fn file_label(path: &PathBuf) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_string()
 }
 
 fn proof_support_count(proof: &ProofReport) -> usize {

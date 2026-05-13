@@ -64,8 +64,27 @@ pub fn approve_release_candidate(
 ) -> Result<ReleaseCandidateApprovalReport, String> {
     let item = candidate_lifecycle(project_root, memory_root, run_id)?;
     let mut blockers = Vec::new();
+    let reason = if item.candidate_state != crate::contracts::CandidateState::Ready {
+        format!(
+            "candidate_state={}",
+            format!("{:?}", item.candidate_state).to_ascii_lowercase()
+        )
+    } else if item.replay_status != "ok" {
+        format!("replay_status={}", item.replay_status)
+    } else if item.cargo_test_ok != Some(true) {
+        "cargo_test_ok=false".to_string()
+    } else if item.cargo_run_ok != Some(true) {
+        "cargo_run_ok=false".to_string()
+    } else if !item.promotion_blockers.is_empty() {
+        "promotion_gate_blocked".to_string()
+    } else {
+        "unknown".to_string()
+    };
     if item.candidate_state != crate::contracts::CandidateState::Ready {
-        blockers.push(format!("candidate_state_{:?}", item.candidate_state));
+        blockers.push(format!(
+            "candidate_state={}",
+            format!("{:?}", item.candidate_state).to_ascii_lowercase()
+        ));
     }
     if item.replay_status != "ok" {
         blockers.push("replay_not_ok".to_string());
@@ -83,8 +102,8 @@ pub fn approve_release_candidate(
         blockers.sort();
         blockers.dedup();
         return Err(format!(
-            "release candidate approval blocked: {}",
-            blockers.join(", ")
+            "release approval refused\nrun_id={run_id}\nreason={reason}\nblockers={}",
+            blockers.join(",")
         ));
     }
 

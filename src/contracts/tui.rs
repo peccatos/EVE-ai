@@ -23,9 +23,17 @@ pub struct TuiDashboardState {
     #[serde(default)]
     pub blocked_candidates: usize,
     #[serde(default)]
+    pub quarantined_candidates: usize,
+    #[serde(default)]
+    pub duplicate_candidates: usize,
+    #[serde(default)]
+    pub unreplayable_candidates: usize,
+    #[serde(default)]
     pub release_status: String,
     #[serde(default)]
     pub warnings: Vec<String>,
+    #[serde(default)]
+    pub missing_green_conditions: Vec<String>,
     #[serde(default)]
     pub blockers: Vec<String>,
     #[serde(default)]
@@ -61,11 +69,31 @@ pub struct TuiCandidateRow {
     #[serde(default)]
     pub state: String,
     #[serde(default)]
+    pub mutation_kind: String,
+    #[serde(default)]
+    pub mutation_class: String,
+    #[serde(default)]
+    pub target_file: String,
+    #[serde(default)]
+    pub score: f32,
+    #[serde(default)]
+    pub risk: f32,
+    #[serde(default)]
     pub promotion_eligibility: String,
+    #[serde(default)]
+    pub promotion_allowed: bool,
     #[serde(default)]
     pub replay_status: String,
     #[serde(default)]
     pub block_reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cargo_test_ok: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cargo_run_ok: Option<bool>,
+    #[serde(default)]
+    pub duplicate_rejected: bool,
+    #[serde(default)]
+    pub promoted: bool,
     #[serde(default)]
     pub updated_at: u64,
 }
@@ -115,7 +143,11 @@ pub struct TuiReleaseState {
     #[serde(default)]
     pub green_gate_readiness: String,
     #[serde(default)]
-    pub missing_requirements: Vec<String>,
+    pub warnings: Vec<String>,
+    #[serde(default)]
+    pub missing_green_conditions: Vec<String>,
+    #[serde(default)]
+    pub blockers: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -132,4 +164,6 @@ pub struct TuiState {
     pub release: TuiReleaseState,
     #[serde(default)]
     pub logs: Vec<String>,
+    #[serde(default)]
+    pub parse_messages: Vec<String>,
 }

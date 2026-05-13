@@ -75,7 +75,7 @@ pub fn load_metrics(memory_root: &str) -> Result<EvolutionMetrics, String> {
     refresh_metrics(memory_root)
 }
 
-fn load_cached_metrics(memory_root: &str) -> Result<EvolutionMetrics, String> {
+pub fn load_metrics_snapshot(memory_root: &str) -> Result<EvolutionMetrics, String> {
     let path = Path::new(memory_root).join("metrics.json");
     if !path.exists() {
         return Ok(EvolutionMetrics::default());
@@ -89,7 +89,7 @@ pub fn update_metrics_after_log(
     memory_root: &str,
     entry: &EvolutionLogEntry,
 ) -> Result<EvolutionMetrics, String> {
-    let mut metrics = load_cached_metrics(memory_root)?;
+    let mut metrics = load_metrics_snapshot(memory_root)?;
     let previous_total = metrics.total_runs;
     metrics.total_runs += 1;
     apply_outcome_counts(&mut metrics, classify_run_outcome(entry));
@@ -111,7 +111,7 @@ pub fn update_metrics_after_replay(
     memory_root: &str,
     replay: &ReplayResult,
 ) -> Result<EvolutionMetrics, String> {
-    let mut metrics = load_cached_metrics(memory_root)?;
+    let mut metrics = load_metrics_snapshot(memory_root)?;
     if replay_is_ok(replay) {
         metrics.replay_passed += 1;
     } else {

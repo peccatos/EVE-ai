@@ -54,16 +54,23 @@ fn render_dashboard(state: &TuiState, output: &mut String) {
         dashboard.campaign_mode_allowed
     ));
     output.push_str(&format!(
-        "latest_run={} last_replay={} candidates={} ready={} blocked={} sandbox_leaks={}\n",
+        "latest_run={} last_replay={} candidates={} ready={} blocked={} quarantined={} duplicate={} unreplayable={} sandbox_leaks={}\n",
         dashboard.latest_run_id.as_deref().unwrap_or("missing"),
         dashboard.last_replay_status,
         dashboard.candidate_count,
         dashboard.ready_candidates,
         dashboard.blocked_candidates,
+        dashboard.quarantined_candidates,
+        dashboard.duplicate_candidates,
+        dashboard.unreplayable_candidates,
         dashboard.sandbox_leak_count
     ));
     output.push_str(&format!("release_status={}\n", dashboard.release_status));
     output.push_str(&format!("warnings={}\n", join_or_none(&dashboard.warnings)));
+    output.push_str(&format!(
+        "missing_green_conditions={}\n",
+        join_or_none(&dashboard.missing_green_conditions)
+    ));
     output.push_str(&format!("blockers={}\n", join_or_none(&dashboard.blockers)));
 }
 
@@ -102,11 +109,21 @@ fn render_candidates(state: &TuiState, output: &mut String, width: usize) {
     for candidate in &state.candidates {
         output.push_str(&truncate(
             &format!(
-                "{} state={} promotion={} replay={} reason={} updated={}",
+                "{} state={} kind={} class={} target={} score={:.2} risk={:.2} promotion={} allowed={} replay={} cargo_test={:?} cargo_run={:?} duplicate={} promoted={} reason={} updated={}",
                 candidate.run_id,
                 candidate.state,
+                candidate.mutation_kind,
+                candidate.mutation_class,
+                candidate.target_file,
+                candidate.score,
+                candidate.risk,
                 candidate.promotion_eligibility,
+                candidate.promotion_allowed,
                 candidate.replay_status,
+                candidate.cargo_test_ok,
+                candidate.cargo_run_ok,
+                candidate.duplicate_rejected,
+                candidate.promoted,
                 candidate.block_reason,
                 candidate.updated_at
             ),
@@ -160,14 +177,20 @@ fn render_release(state: &TuiState, output: &mut String) {
         release.release_health,
         release.green_gate_readiness
     ));
+    output.push_str(&format!("warnings={}\n", join_or_none(&release.warnings)));
     output.push_str(&format!(
-        "missing_requirements={}\n",
-        join_or_none(&release.missing_requirements)
+        "missing_green_conditions={}\n",
+        join_or_none(&release.missing_green_conditions)
     ));
+    output.push_str(&format!("blockers={}\n", join_or_none(&release.blockers)));
 }
 
 fn render_logs(state: &TuiState, output: &mut String, width: usize) {
     output.push_str("Logs\n");
+    if state.logs.is_empty() {
+        output.push_str("no recent events\n");
+        return;
+    }
     for line in &state.logs {
         output.push_str(&truncate(line, width));
         output.push('\n');
