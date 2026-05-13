@@ -1,0 +1,70 @@
+name: Rust CI
+
+on:
+  push:
+    branches:
+      - main
+      - "phase-*"
+  pull_request:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  rust-ci:
+    name: fmt-check-test-agent
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Show Rust versions
+        run: |
+          rustc --version
+          cargo --version
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Cargo check
+        run: cargo check
+
+      - name: Test production agent phase
+        run: cargo test --test production_agent_phase16_17_tests -- --test-threads=1
+
+      - name: Test LLM adapter
+        run: cargo test --test llm_adapter_tests -- --test-threads=1
+
+      - name: Test safe apply
+        run: cargo test --test agent_safe_apply_tests -- --test-threads=1
+
+      - name: Test TUI truth layer
+        run: cargo test --test evolution_phase151x_tests -- --test-threads=1
+
+      - name: Test Phase 16 readiness
+        run: cargo test --test evolution_phase160p_readiness_tests -- --test-threads=1
+
+      - name: Test library
+        run: cargo test --lib
+
+      - name: Full test suite
+        run: cargo test
+
+      - name: Agent readiness smoke
+        run: cargo run -- agent-readiness
+
+      - name: LLM health smoke
+        run: cargo run -- llm-health
+
+      - name: TUI snapshot smoke
+        run: cargo run -- tui </dev/null
