@@ -71,3 +71,13 @@ memory/releases/preflight/
 .eva-evolution-tests/
 .eva-runtime-tests/
 .eva-operations-tests/
+
+memory/inspections/
+memory/plans/
+memory/proposals/
+memory/approvals/
+memory/applies/
+memory/validations/
+memory/pr_summaries/
+memory/agent/
+memory/specimens/
