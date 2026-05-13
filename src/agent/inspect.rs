@@ -14,7 +14,7 @@ pub fn inspect_workspace(
         inspection_id: id("inspection"),
         generated_at: now_unix(),
         repo_root: root.display().to_string(),
-        git_status: git_stdout(root, &["status", "--short"]).unwrap_or_else(|| "unknown".into()),
+        git_status: git_stdout(root),
         branch: git_stdout(root, &["branch", "--show-current"]),
         head: git_stdout(root, &["rev-parse", "HEAD"]),
         language: if cargo_toml_exists {
@@ -98,4 +98,12 @@ fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
         return None;
     }
     Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn detect_git_status(root: &std::path::Path) -> String {
+    match git_stdout(root, &["status", "--short"]) {
+        Some(output) if output.trim().is_empty() => "clean".to_string(),
+        Some(_) => "dirty".to_string(),
+        None => "unknown".to_string(),
+    }
 }
