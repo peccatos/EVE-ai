@@ -2,10 +2,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::contracts::{
-    AgentTask, CandidateState, EvolutionLogEntry, EvolutionReport, ProductionAgentReadiness,
-    PromotionQueue, PromotionQueueItem, RuntimeCandidateManifest, RuntimeServiceMetadata,
+    AgentPatternSummary, AgentTask, CandidateState, EvolutionLogEntry, EvolutionReport,
+    ProductionAgentReadiness, ProductionAgentV2Readiness, PromotionQueue, PromotionQueueItem,
+    RepoMap, RuntimeCandidateManifest, RuntimeServiceMetadata, SelfImprovementProposal,
     TuiAgentState, TuiCandidateRow, TuiDashboardState, TuiMetricsState, TuiReleaseState, TuiRunRow,
-    TuiState, ValidationRun,
+    TuiState, ValidationRun, WorkFitnessScore,
 };
 use crate::evolution::{
     autonomy_status, count_sandbox_leaks, load_latest_runtime_validation, load_metrics_snapshot,
@@ -536,6 +537,31 @@ fn load_agent_state(memory_root: &Path, parse_messages: &mut Vec<String>) -> Tui
         "agent readiness",
         parse_messages,
     );
+    let readiness_v2 = load_exact_json::<ProductionAgentV2Readiness>(
+        &memory_root.join("agent").join("v2_readiness.json"),
+        "agent v2 readiness",
+        parse_messages,
+    );
+    let repo_map = load_exact_json::<RepoMap>(
+        &memory_root.join("repo_map").join("latest_repo_map.json"),
+        "repo map",
+        parse_messages,
+    );
+    let patterns = load_exact_json::<AgentPatternSummary>(
+        &memory_root.join("patterns").join("agent_patterns.json"),
+        "agent patterns",
+        parse_messages,
+    );
+    let fitness = load_exact_json::<Vec<WorkFitnessScore>>(
+        &memory_root.join("fitness").join("latest_fitness.json"),
+        "work fitness",
+        parse_messages,
+    );
+    let self_improvement = load_exact_json::<SelfImprovementProposal>(
+        &memory_root.join("self_improvement").join("latest.json"),
+        "self improvement",
+        parse_messages,
+    );
     let openai_configured = std::env::var("OPENAI_API_KEY")
         .ok()
         .filter(|value| !value.is_empty())
@@ -590,8 +616,51 @@ fn load_agent_state(memory_root: &Path, parse_messages: &mut Vec<String>) -> Tui
             .as_ref()
             .map(|value| value.production_agent_v1_ready)
             .unwrap_or(false),
-        readiness_blockers: readiness.map(|value| value.blockers).unwrap_or_default(),
+        production_agent_v2_ready: readiness_v2
+            .as_ref()
+            .map(|value| value.production_agent_v2_ready)
+            .unwrap_or(false),
+        repo_map_modules: repo_map
+            .as_ref()
+            .map(|value| value.modules.len())
+            .unwrap_or(0),
+        task_outcome_count: count_json_files(&memory_root.join("task_outcomes")),
+        pattern_count: patterns
+            .as_ref()
+            .map(|value| value.patterns.len())
+            .unwrap_or(0),
+        fitness_count: fitness.as_ref().map(|value| value.len()).unwrap_or(0),
+        latest_self_improvement_status: self_improvement
+            .as_ref()
+            .map(|value| {
+                if value.blockers.is_empty() {
+                    "proposal_available".to_string()
+                } else {
+                    value.blockers.join(",")
+                }
+            })
+            .unwrap_or_else(|| "missing".to_string()),
+        readiness_blockers: readiness_v2
+            .map(|value| value.blockers)
+            .or_else(|| readiness.map(|value| value.blockers))
+            .unwrap_or_default(),
     }
+}
+
+fn count_json_files(dir: &Path) -> usize {
+    fs::read_dir(dir)
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().and_then(|ext| ext.to_str()) == Some("json"))
+        .filter(|entry| {
+            !matches!(
+                entry.path().file_name().and_then(|name| name.to_str()),
+                Some("latest_task_outcome.json" | "index.json")
+            )
+        })
+        .count()
 }
 
 fn load_tasks(memory_root: &Path, parse_messages: &mut Vec<String>) -> Vec<AgentTask> {

@@ -184,3 +184,40 @@ Docs:
 - `docs/agent_validation_report.md`
 - `docs/agent_pr_summary.md`
 - `docs/agent_safety_model.md`
+
+## EVE Production Agent v2 and Learning
+
+Phase 17P to 20G extends the local agent with proposal preview, dry-run, repo
+mapping, outcome memory, pattern extraction, work fitness, strategy selection,
+and governed self-improvement proposals:
+
+```bash
+cargo run -- repo-map
+cargo run -- proposal-show <PROPOSAL_ID>
+cargo run -- apply --dry-run <PROPOSAL_ID>
+cargo run -- task-outcomes
+cargo run -- outcome-analyze
+cargo run -- patterns
+cargo run -- strategy-memory
+cargo run -- fitness
+cargo run -- strategy-select "document agent behavior"
+cargo run -- self-improve propose
+cargo run -- agent-v2-readiness
+```
+
+Future evolution is based on real task outcomes: tasks, plans, proposals,
+approvals, apply results, validations, reports, PR summaries, operator
+decisions, failed proposals, and successful patches.
+
+Additional docs:
+
+- `docs/production_agent_v2.md`
+- `docs/openai_structured_proposals.md`
+- `docs/proposal_preview_dry_run.md`
+- `docs/code_edit_engine_v1.md`
+- `docs/repo_aware_planner.md`
+- `docs/task_outcome_memory.md`
+- `docs/agent_v2_readiness.md`
+- `docs/phase_18_outcome_learning.md`
+- `docs/phase_19_work_fitness.md`
+- `docs/phase_20_governed_self_improvement.md`

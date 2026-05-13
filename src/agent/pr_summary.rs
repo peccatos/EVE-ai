@@ -1,5 +1,6 @@
 use std::fs;
 
+use crate::agent::outcome::build_task_outcome;
 use crate::agent::storage::{id, memory_path, now_unix, save_json_pretty};
 use crate::agent::task::{load_task, update_task};
 use crate::contracts::{AgentTaskStatus, PrSummary};
@@ -31,6 +32,7 @@ pub fn build_pr_summary_for_task(memory_root: &str, task_id: &str) -> Result<PrS
     task.status = AgentTaskStatus::Completed;
     task.pr_summary_id = Some(summary.pr_summary_id.clone());
     update_task(memory_root, task)?;
+    let _ = build_task_outcome(memory_root, task_id);
     Ok(summary)
 }
 

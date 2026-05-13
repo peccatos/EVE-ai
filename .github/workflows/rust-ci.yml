@@ -54,6 +54,36 @@ jobs:
       - name: Test Phase 16 readiness
         run: cargo test --test evolution_phase160p_readiness_tests -- --test-threads=1
 
+      - name: Test production agent v2
+        run: cargo test --test production_agent_v2_tests -- --test-threads=1
+
+      - name: Test OpenAI structured proposals
+        run: cargo test --test openai_structured_proposal_tests -- --test-threads=1
+
+      - name: Test proposal preview and dry-run
+        run: cargo test --test proposal_preview_dry_run_tests -- --test-threads=1
+
+      - name: Test code edit engine
+        run: cargo test --test code_edit_engine_tests -- --test-threads=1
+
+      - name: Test repo-aware planner
+        run: cargo test --test repo_aware_planner_tests -- --test-threads=1
+
+      - name: Test task outcome memory
+        run: cargo test --test task_outcome_memory_tests -- --test-threads=1
+
+      - name: Test outcome learning
+        run: cargo test --test evolution_phase18_outcome_learning_tests -- --test-threads=1
+
+      - name: Test work fitness
+        run: cargo test --test evolution_phase19_work_fitness_tests -- --test-threads=1
+
+      - name: Test strategy selection
+        run: cargo test --test evolution_phase19_strategy_selection_tests -- --test-threads=1
+
+      - name: Test governed self-improvement
+        run: cargo test --test evolution_phase20_self_improvement_tests -- --test-threads=1
+
       - name: Test library
         run: cargo test --lib
 
@@ -62,6 +92,9 @@ jobs:
 
       - name: Agent readiness smoke
         run: cargo run -- agent-readiness
+
+      - name: Agent v2 readiness smoke
+        run: cargo run -- agent-v2-readiness
 
       - name: LLM health smoke
         run: cargo run -- llm-health
