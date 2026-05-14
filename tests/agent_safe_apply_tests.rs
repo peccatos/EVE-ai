@@ -20,10 +20,14 @@ fn safe_path_policy_rejects_forbidden_paths() {
         "/home/user/file",
         "~/file",
         "src/../../etc/passwd",
+        ".github/workflows/deploy.yml",
+        ".github/workflows/release.yml",
+        ".github/workflows/anything.yaml",
     ] {
         assert!(validate_patch_path(path).is_err(), "{path}");
     }
     assert!(validate_patch_path("docs/agent_task.md").is_ok());
+    assert!(validate_patch_path(".github/workflows/rust-ci.yml").is_ok());
 }
 
 #[test]
