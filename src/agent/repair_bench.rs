@@ -881,46 +881,69 @@ fn load_repair_bench_baseline(
     }
     match request.baseline.as_str() {
         "latest" => {
-            let paths = history_paths(&request.output_dir);
-            if paths.latest_json.exists() {
-                let contents = fs::read_to_string(&paths.latest_json)
-                    .map_err(|error| format!("read {}: {error}", paths.latest_json.display()))?;
-                let latest: RepairBenchHistoryEntry = serde_json::from_str(&contents)
-                    .map_err(|error| format!("parse {}: {error}", paths.latest_json.display()))?;
-                let latest_suite = latest.suite.clone();
-                Ok(RepairBenchBaseline {
-                    suite: latest_suite.clone(),
-                    total_cases: latest.total_cases,
-                    actionable_cases: actionable_cases_for_suite(&latest_suite),
-                    passed_cases: latest.passed_cases,
-                    partial_cases: latest.partial_cases,
-                    failed_cases: latest.failed_cases,
-                    detection_success_rate: latest.detection_success_rate,
-                    repair_success_rate: latest.repair_success_rate,
-                    validation_success_rate: latest.validation_success_rate,
-                    evidence_success_rate: latest.evidence_success_rate,
-                })
-            } else {
-                Ok(default_phase21_baseline())
-            }
+            let suite = &request.suite;
+            latest_history_baseline_for_suite(&request.output_dir, suite)
+                .map(|baseline| baseline.unwrap_or_else(|| default_baseline_for_suite(suite)))
         }
-        "" => Ok(default_phase21_baseline()),
-        _ => Ok(default_phase21_baseline()),
+        "" => Ok(default_baseline_for_suite(&request.suite)),
+        _ => Ok(default_baseline_for_suite(&request.suite)),
     }
 }
 
-fn default_phase21_baseline() -> RepairBenchBaseline {
+fn latest_history_baseline_for_suite(
+    output_dir: &Path,
+    suite: &str,
+) -> Result<Option<RepairBenchBaseline>, String> {
+    let paths = history_paths(output_dir);
+    let entries = load_history_entries(&paths.history_jsonl, None)?;
+    Ok(entries
+        .into_iter()
+        .rev()
+        .find(|entry| entry.suite == suite)
+        .map(|entry| history_entry_to_baseline(&entry)))
+}
+
+fn history_entry_to_baseline(entry: &RepairBenchHistoryEntry) -> RepairBenchBaseline {
     RepairBenchBaseline {
-        suite: "phase21".to_string(),
-        total_cases: 5,
-        actionable_cases: 4,
-        passed_cases: 4,
-        partial_cases: 1,
-        failed_cases: 0,
-        detection_success_rate: 1.0,
-        repair_success_rate: 1.0,
-        validation_success_rate: 1.0,
-        evidence_success_rate: 1.0,
+        suite: entry.suite.clone(),
+        total_cases: entry.total_cases,
+        actionable_cases: actionable_cases_for_suite(&entry.suite),
+        passed_cases: entry.passed_cases,
+        partial_cases: entry.partial_cases,
+        failed_cases: entry.failed_cases,
+        detection_success_rate: entry.detection_success_rate,
+        repair_success_rate: entry.repair_success_rate,
+        validation_success_rate: entry.validation_success_rate,
+        evidence_success_rate: entry.evidence_success_rate,
+    }
+}
+
+fn default_baseline_for_suite(suite: &str) -> RepairBenchBaseline {
+    match suite {
+        "phase24x" => RepairBenchBaseline {
+            suite: "phase24x".to_string(),
+            total_cases: 8,
+            actionable_cases: 7,
+            passed_cases: 7,
+            partial_cases: 1,
+            failed_cases: 0,
+            detection_success_rate: 1.0,
+            repair_success_rate: 1.0,
+            validation_success_rate: 1.0,
+            evidence_success_rate: 1.0,
+        },
+        _ => RepairBenchBaseline {
+            suite: "phase21".to_string(),
+            total_cases: 5,
+            actionable_cases: 4,
+            passed_cases: 4,
+            partial_cases: 1,
+            failed_cases: 0,
+            detection_success_rate: 1.0,
+            repair_success_rate: 1.0,
+            validation_success_rate: 1.0,
+            evidence_success_rate: 1.0,
+        },
     }
 }
 
@@ -1000,7 +1023,7 @@ fn report_has_actionable_failure(report: &RepairBenchReport) -> bool {
 }
 
 fn gate_status_for(
-    baseline: &RepairBenchBaseline,
+    _baseline: &RepairBenchBaseline,
     current_report: &RepairBenchReport,
     regressions: &[RepairBenchRegression],
 ) -> RepairBenchGateStatus {
@@ -1009,8 +1032,6 @@ fn gate_status_for(
     }
     if regressions.is_empty() {
         RepairBenchGateStatus::Passed
-    } else if baseline.suite != current_report.suite {
-        RepairBenchGateStatus::Warn
     } else {
         RepairBenchGateStatus::Failed
     }

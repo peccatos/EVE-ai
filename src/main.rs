@@ -44,9 +44,9 @@ use eva_runtime_with_task_validator::{
     run_planned_cycles, run_planned_evolution_cycle, run_recombined_evolution_cycle,
     run_repo_patch_report, run_stored_campaign, run_task_from_path, run_tui, serve_runtime_daemon,
     should_run_repo_patch_mode, suggest_strategy_tasks, supervise_task, CycleInput, DoctorRequest,
-    ExternalTrialRequest, FixOnly, FixRequest, FixRiskCap, RepairBenchGateRequest,
-    RepairBenchRequest, RepoPatchCliConfig, RuntimeCliCommand, RuntimeCycleRunner,
-    RUNTIME_CLI_HELP,
+    ExternalTrialRequest, FixOnly, FixRequest, FixRiskCap, RepairBenchGateReport,
+    RepairBenchGateRequest, RepairBenchRequest, RepoPatchCliConfig, RuntimeCliCommand,
+    RuntimeCycleRunner, RUNTIME_CLI_HELP,
 };
 use serde::Deserialize;
 use std::fs;
@@ -73,7 +73,12 @@ fn main() {
 
     if let Some(output) = handle_agent_cli(&args) {
         match output {
-            Ok(output) => println!("{output}"),
+            Ok(output) => {
+                println!("{output}");
+                if is_repair_bench_gate_command(&args) {
+                    std::process::exit(repair_bench_gate_exit_code(&output));
+                }
+            }
             Err(err) => {
                 eprintln!("agent_error: {err}");
                 std::process::exit(1);
@@ -1516,6 +1521,38 @@ fn main() {
             std::process::exit(1);
         }
     }
+}
+
+fn is_repair_bench_gate_command(args: &[String]) -> bool {
+    matches!(
+        args.first().map(String::as_str),
+        Some("repair-bench-gate" | "--repair-bench-gate")
+    )
+}
+
+fn repair_bench_gate_exit_code(output: &str) -> i32 {
+    if let Ok(report) = serde_json::from_str::<RepairBenchGateReport>(output) {
+        return if matches!(
+            report.status,
+            eva_runtime_with_task_validator::RepairBenchGateStatus::Failed
+                | eva_runtime_with_task_validator::RepairBenchGateStatus::Blocked
+        ) {
+            1
+        } else {
+            0
+        };
+    }
+
+    for line in output.lines() {
+        if let Some(status) = line.strip_prefix("Status: ") {
+            return match status.trim() {
+                "failed" | "blocked" => 1,
+                _ => 0,
+            };
+        }
+    }
+
+    0
 }
 
 fn handle_agent_cli(args: &[String]) -> Option<Result<String, String>> {

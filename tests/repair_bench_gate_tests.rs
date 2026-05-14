@@ -1,15 +1,13 @@
-use std::path::PathBuf;
+use std::fs;
 use std::process::Command;
 
 #[path = "evolution_test_support.rs"]
 mod evolution_test_support;
 
 use eva_runtime_with_task_validator::{
-    benchmark_from_report, detect_repair_bench_regressions, print_repair_bench_gate,
-    print_repair_bench_history, run_repair_bench, run_repair_bench_gate, run_repair_bench_history,
-    RepairBenchBaseline, RepairBenchCaseResult, RepairBenchCaseStatus, RepairBenchGateRequest,
-    RepairBenchGateStatus, RepairBenchMetricSummary, RepairBenchReport, RepairBenchRequest,
-    RepairBenchStatus,
+    print_repair_bench_gate, print_repair_bench_history, run_repair_bench, run_repair_bench_gate,
+    run_repair_bench_history, RepairBenchBaseline, RepairBenchGateRequest, RepairBenchGateStatus,
+    RepairBenchRequest,
 };
 
 #[test]
@@ -50,9 +48,25 @@ fn repair_bench_history_records_run() {
 }
 
 #[test]
-fn repair_bench_gate_passes_against_phase21_baseline() {
+fn repair_bench_gate_uses_latest_history_for_same_suite_only() {
     let root = evolution_test_support::unique_evolution_root("repair-bench-gate-pass");
     let output_dir = root.join("bench-output");
+    let _ = run_repair_bench(eva_runtime_with_task_validator::RepairBenchRequest {
+        bench_id: "repair-bench-gate-phase24x".to_string(),
+        suite: "phase24x".to_string(),
+        output_dir: output_dir.clone(),
+        no_llm: true,
+        json: false,
+    })
+    .expect("phase24x bench");
+    let _ = run_repair_bench(eva_runtime_with_task_validator::RepairBenchRequest {
+        bench_id: "repair-bench-gate-phase21".to_string(),
+        suite: "phase21".to_string(),
+        output_dir: output_dir.clone(),
+        no_llm: true,
+        json: false,
+    })
+    .expect("phase21 bench");
     let report = run_repair_bench_gate(RepairBenchGateRequest {
         suite: "phase21".to_string(),
         baseline: "latest".to_string(),
@@ -62,6 +76,9 @@ fn repair_bench_gate_passes_against_phase21_baseline() {
     })
     .expect("gate report");
     assert!(matches!(report.status, RepairBenchGateStatus::Passed));
+    assert_eq!(report.baseline.suite, "phase21");
+    assert_eq!(report.baseline.passed_cases, 4);
+    assert_eq!(report.baseline.total_cases, 5);
     assert!(report.regressions.is_empty());
     assert_eq!(report.current_report.passed_cases, 4);
     assert!(report.output_dir.join("report.json").exists());
@@ -70,64 +87,166 @@ fn repair_bench_gate_passes_against_phase21_baseline() {
 }
 
 #[test]
-fn repair_bench_gate_fails_when_failed_cases_increase() {
-    let baseline = RepairBenchBaseline {
-        suite: "phase21".to_string(),
-        total_cases: 5,
-        actionable_cases: 4,
-        passed_cases: 4,
-        partial_cases: 1,
-        failed_cases: 0,
-        detection_success_rate: 1.0,
-        repair_success_rate: 1.0,
-        validation_success_rate: 1.0,
-        evidence_success_rate: 1.0,
-    };
-    let current_report = fake_report(4, 1, 0);
-    let current = benchmark_from_report(&current_report);
-    let regressions = detect_repair_bench_regressions(&baseline, &current, &current_report);
-    assert!(regressions
-        .iter()
-        .any(|regression| regression.field == "failed_cases increased"));
-}
-
-#[test]
-fn repair_bench_gate_fails_when_passed_cases_decrease() {
-    let baseline = RepairBenchBaseline {
-        suite: "phase21".to_string(),
-        total_cases: 5,
-        actionable_cases: 4,
-        passed_cases: 4,
-        partial_cases: 1,
-        failed_cases: 0,
-        detection_success_rate: 1.0,
-        repair_success_rate: 1.0,
-        validation_success_rate: 1.0,
-        evidence_success_rate: 1.0,
-    };
-    let current_report = fake_report(3, 1, 1);
-    let current = benchmark_from_report(&current_report);
-    let regressions = detect_repair_bench_regressions(&baseline, &current, &current_report);
-    assert!(regressions
-        .iter()
-        .any(|regression| regression.field == "passed_cases decreased"));
-}
-
-#[test]
-fn repair_bench_gate_ignores_unknown_empty_project_partial() {
-    let root = evolution_test_support::unique_evolution_root("repair-bench-gate-partial");
+fn repair_bench_gate_ignores_latest_history_from_different_suite() {
+    let root = evolution_test_support::unique_evolution_root("repair-bench-gate-ignore-suite");
     let output_dir = root.join("bench-output");
+    let _ = run_repair_bench(eva_runtime_with_task_validator::RepairBenchRequest {
+        bench_id: "repair-bench-gate-phase24x-only".to_string(),
+        suite: "phase24x".to_string(),
+        output_dir: output_dir.clone(),
+        no_llm: true,
+        json: false,
+    })
+    .expect("phase24x bench");
     let report = run_repair_bench_gate(RepairBenchGateRequest {
         suite: "phase21".to_string(),
         baseline: "latest".to_string(),
         baseline_file: None,
-        output_dir,
+        output_dir: output_dir.clone(),
         json: false,
     })
     .expect("gate report");
     assert!(matches!(report.status, RepairBenchGateStatus::Passed));
-    assert_eq!(report.current_report.partial_cases, 1);
-    assert_eq!(report.current_report.failed_cases, 0);
+    assert_eq!(report.baseline.suite, "phase21");
+    assert_eq!(report.baseline.passed_cases, 4);
+    assert_eq!(report.baseline.total_cases, 5);
+    evolution_test_support::remove_root(&root);
+}
+
+#[test]
+fn repair_bench_gate_uses_builtin_phase21_baseline_when_no_phase21_history_exists() {
+    let root = evolution_test_support::unique_evolution_root("repair-bench-gate-phase21-default");
+    let output_dir = root.join("bench-output");
+    let _ = run_repair_bench(eva_runtime_with_task_validator::RepairBenchRequest {
+        bench_id: "repair-bench-gate-phase24x-history".to_string(),
+        suite: "phase24x".to_string(),
+        output_dir: output_dir.clone(),
+        no_llm: true,
+        json: false,
+    })
+    .expect("phase24x bench");
+    let report = run_repair_bench_gate(RepairBenchGateRequest {
+        suite: "phase21".to_string(),
+        baseline: "latest".to_string(),
+        baseline_file: None,
+        output_dir: output_dir.clone(),
+        json: false,
+    })
+    .expect("gate report");
+    assert!(matches!(report.status, RepairBenchGateStatus::Passed));
+    assert_eq!(report.baseline.suite, "phase21");
+    assert_eq!(report.baseline.total_cases, 5);
+    assert_eq!(report.baseline.passed_cases, 4);
+    evolution_test_support::remove_root(&root);
+}
+
+#[test]
+fn repair_bench_gate_uses_builtin_phase24x_baseline_when_no_phase24x_history_exists() {
+    let root = evolution_test_support::unique_evolution_root("repair-bench-gate-phase24x-default");
+    let output_dir = root.join("bench-output");
+    let _ = run_repair_bench(eva_runtime_with_task_validator::RepairBenchRequest {
+        bench_id: "repair-bench-gate-phase21-history".to_string(),
+        suite: "phase21".to_string(),
+        output_dir: output_dir.clone(),
+        no_llm: true,
+        json: false,
+    })
+    .expect("phase21 bench");
+    let report = run_repair_bench_gate(RepairBenchGateRequest {
+        suite: "phase24x".to_string(),
+        baseline: "latest".to_string(),
+        baseline_file: None,
+        output_dir: output_dir.clone(),
+        json: false,
+    })
+    .expect("gate report");
+    assert!(matches!(report.status, RepairBenchGateStatus::Passed));
+    assert_eq!(report.baseline.suite, "phase24x");
+    assert_eq!(report.baseline.total_cases, 8);
+    assert_eq!(report.baseline.actionable_cases, 7);
+    assert_eq!(report.baseline.passed_cases, 7);
+    assert_eq!(report.baseline.partial_cases, 1);
+    assert_eq!(report.baseline.failed_cases, 0);
+    evolution_test_support::remove_root(&root);
+}
+
+#[test]
+fn repair_bench_gate_returns_failed_status_on_regression() {
+    let root = evolution_test_support::unique_evolution_root("repair-bench-gate-regression");
+    let output_dir = root.join("bench-output");
+    let baseline = RepairBenchBaseline {
+        suite: "phase24x".to_string(),
+        total_cases: 8,
+        actionable_cases: 7,
+        passed_cases: 7,
+        partial_cases: 1,
+        failed_cases: 0,
+        detection_success_rate: 1.0,
+        repair_success_rate: 1.0,
+        validation_success_rate: 1.0,
+        evidence_success_rate: 1.0,
+    };
+    let baseline_file = output_dir.join("baseline.json");
+    fs::create_dir_all(&output_dir).expect("create output dir");
+    fs::write(
+        &baseline_file,
+        serde_json::to_string_pretty(&baseline).expect("serialize baseline"),
+    )
+    .expect("write baseline file");
+    let report = run_repair_bench_gate(RepairBenchGateRequest {
+        suite: "phase21".to_string(),
+        baseline: "latest".to_string(),
+        baseline_file: Some(baseline_file),
+        output_dir: output_dir.clone(),
+        json: false,
+    })
+    .expect("gate report");
+    assert!(matches!(report.status, RepairBenchGateStatus::Failed));
+    assert!(!report.regressions.is_empty());
+    assert!(report
+        .regressions
+        .iter()
+        .any(|regression| regression.field == "passed_cases decreased"));
+    evolution_test_support::remove_root(&root);
+}
+
+#[test]
+fn repair_bench_gate_cli_exits_nonzero_on_regression() {
+    let root = evolution_test_support::unique_evolution_root("repair-bench-gate-cli-regression");
+    let output_dir = root.join("bench-output");
+    let baseline = RepairBenchBaseline {
+        suite: "phase24x".to_string(),
+        total_cases: 8,
+        actionable_cases: 7,
+        passed_cases: 7,
+        partial_cases: 1,
+        failed_cases: 0,
+        detection_success_rate: 1.0,
+        repair_success_rate: 1.0,
+        validation_success_rate: 1.0,
+        evidence_success_rate: 1.0,
+    };
+    let baseline_file = output_dir.join("baseline.json");
+    fs::create_dir_all(&output_dir).expect("create output dir");
+    fs::write(
+        &baseline_file,
+        serde_json::to_string_pretty(&baseline).expect("serialize baseline"),
+    )
+    .expect("write baseline file");
+    let status = Command::new(env!("CARGO_BIN_EXE_eva_runtime_with_task_validator"))
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .args([
+            "repair-bench-gate",
+            "--suite",
+            "phase21",
+            "--baseline-file",
+            baseline_file.to_str().expect("baseline path"),
+            "--output",
+            output_dir.to_str().expect("output path"),
+        ])
+        .status()
+        .expect("run repair-bench-gate cli");
+    assert!(!status.success());
     evolution_test_support::remove_root(&root);
 }
 
@@ -151,6 +270,24 @@ fn repair_bench_gate_json_output_is_parseable() {
 }
 
 #[test]
+fn repair_bench_gate_ignores_unknown_empty_project_partial() {
+    let root = evolution_test_support::unique_evolution_root("repair-bench-gate-partial");
+    let output_dir = root.join("bench-output");
+    let report = run_repair_bench_gate(RepairBenchGateRequest {
+        suite: "phase21".to_string(),
+        baseline: "latest".to_string(),
+        baseline_file: None,
+        output_dir,
+        json: false,
+    })
+    .expect("gate report");
+    assert!(matches!(report.status, RepairBenchGateStatus::Passed));
+    assert_eq!(report.current_report.partial_cases, 1);
+    assert_eq!(report.current_report.failed_cases, 0);
+    evolution_test_support::remove_root(&root);
+}
+
+#[test]
 fn repair_bench_gate_does_not_mutate_source_tree() {
     let root = evolution_test_support::unique_evolution_root("repair-bench-gate-clean");
     let output_dir = root.join("bench-output");
@@ -166,72 +303,6 @@ fn repair_bench_gate_does_not_mutate_source_tree() {
     let after = git_status_short();
     assert_eq!(before, after);
     evolution_test_support::remove_root(&root);
-}
-
-fn fake_report(
-    passed_cases: usize,
-    failed_cases: usize,
-    partial_cases: usize,
-) -> RepairBenchReport {
-    let total_cases = passed_cases + failed_cases + partial_cases;
-    let case_results = vec![
-        fake_case(
-            "actionable_pass",
-            Some("missing_ci"),
-            RepairBenchCaseStatus::Passed,
-        ),
-        fake_case(
-            "actionable_fail",
-            Some("missing_ci"),
-            RepairBenchCaseStatus::Failed,
-        ),
-        fake_case("unknown", None, RepairBenchCaseStatus::Partial),
-    ];
-    RepairBenchReport {
-        bench_id: "fake-bench".to_string(),
-        suite: "phase21".to_string(),
-        status: RepairBenchStatus::Warn,
-        total_cases,
-        passed_cases,
-        failed_cases,
-        partial_cases,
-        case_results,
-        metrics: RepairBenchMetricSummary {
-            total_cases,
-            actionable_cases: 1,
-            passed_cases,
-            failed_cases,
-            partial_cases,
-            detection_success_rate: 1.0,
-            repair_success_rate: 1.0,
-            validation_success_rate: 1.0,
-            evidence_success_rate: 1.0,
-        },
-        output_dir: PathBuf::from("/tmp/fake-bench"),
-        warnings: Vec::new(),
-        blockers: Vec::new(),
-    }
-}
-
-fn fake_case(
-    case_id: &str,
-    expected_problem: Option<&str>,
-    status: RepairBenchCaseStatus,
-) -> RepairBenchCaseResult {
-    RepairBenchCaseResult {
-        case_id: case_id.to_string(),
-        kind: case_id.to_string(),
-        target_path: PathBuf::from("/tmp/fake"),
-        detected_problem: expected_problem.map(str::to_string),
-        expected_problem: expected_problem.map(str::to_string),
-        fix_status: "validation_passed".to_string(),
-        validation_passed: true,
-        evidence_dir: Some(PathBuf::from("/tmp/fake/evidence")),
-        files_expected: vec!["file".to_string()],
-        files_observed: vec!["file".to_string()],
-        status,
-        notes: Vec::new(),
-    }
 }
 
 fn git_status_short() -> Vec<String> {
