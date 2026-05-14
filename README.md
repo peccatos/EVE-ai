@@ -259,3 +259,11 @@ cargo run -- repair-bench --json
 See also:
 
 - `docs/phase_23_repair_benchmark.md`
+
+## Validation
+
+```bash
+cargo fmt --check
+cargo check
+cargo test
+```
