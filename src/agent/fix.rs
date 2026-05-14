@@ -18,9 +18,6 @@ pub fn run_fix(request: FixRequest) -> Result<FixReport, String> {
         .target_path
         .canonicalize()
         .unwrap_or(request.target_path.clone());
-    let evidence = build_evidence_paths(&request);
-    save_json_pretty(&evidence.request_json, &request)?;
-
     let workspace_changes = git_status_short(&target_root);
     let workspace_dirty = !workspace_changes.is_empty();
     let project_type = if target_root.join("Cargo.toml").exists() {
@@ -28,6 +25,8 @@ pub fn run_fix(request: FixRequest) -> Result<FixReport, String> {
     } else {
         "unknown".to_string()
     };
+    let evidence = build_evidence_paths(&request, &target_root);
+    save_json_pretty(&evidence.request_json, &request)?;
 
     let Some(detected) = detect_problem(
         &target_root,
@@ -46,10 +45,14 @@ pub fn run_fix(request: FixRequest) -> Result<FixReport, String> {
             detected_problem: None,
             risk: "low".to_string(),
             files_planned: Vec::new(),
-            files_changed: Vec::new(),
+            files_changed_by_patch: Vec::new(),
+            files_changed_after_validation: Vec::new(),
+            validation_side_effects: Vec::new(),
             validation_commands: Vec::new(),
             status: FixStatus::NoActionableProblem,
             evidence_dir: evidence.evidence_dir.clone(),
+            source_mutation: false,
+            evidence_written: true,
             warnings: Vec::new(),
             blockers: Vec::new(),
             provider: effective_provider_name(&request).to_string(),
@@ -103,10 +106,14 @@ pub fn run_fix(request: FixRequest) -> Result<FixReport, String> {
             detected_problem: Some(problem_label(&detected.kind).to_string()),
             risk,
             files_planned: proposal.files_to_change.clone(),
-            files_changed: Vec::new(),
+            files_changed_by_patch: Vec::new(),
+            files_changed_after_validation: Vec::new(),
+            validation_side_effects: Vec::new(),
             validation_commands: detected.validation_commands.clone(),
             status,
             evidence_dir: evidence.evidence_dir.clone(),
+            source_mutation: false,
+            evidence_written: true,
             warnings,
             blockers,
             provider: proposal.proposer.clone(),
@@ -126,10 +133,14 @@ pub fn run_fix(request: FixRequest) -> Result<FixReport, String> {
             detected_problem: Some(problem_label(&detected.kind).to_string()),
             risk,
             files_planned: proposal.files_to_change.clone(),
-            files_changed: Vec::new(),
+            files_changed_by_patch: Vec::new(),
+            files_changed_after_validation: Vec::new(),
+            validation_side_effects: Vec::new(),
             validation_commands: detected.validation_commands.clone(),
             status: FixStatus::Blocked,
             evidence_dir: evidence.evidence_dir.clone(),
+            source_mutation: false,
+            evidence_written: true,
             warnings,
             blockers,
             provider: proposal.proposer.clone(),
@@ -144,7 +155,18 @@ pub fn run_fix(request: FixRequest) -> Result<FixReport, String> {
         save_json_pretty(path, &apply_result)?;
     }
 
+    let git_status_before_validation = git_status_short(&target_root);
+    let cargo_lock_before_validation = target_root.join("Cargo.lock").exists();
     let validation = run_fix_validation(&target_root, &evidence.evidence_dir, &detected);
+    let git_status_after_validation = git_status_short(&target_root);
+    let cargo_lock_after_validation = target_root.join("Cargo.lock").exists();
+    let validation_side_effects = compute_validation_side_effects(
+        &git_status_before_validation,
+        &git_status_after_validation,
+        &apply_result.files_changed,
+        cargo_lock_before_validation,
+        cargo_lock_after_validation,
+    );
     if let Some(path) = &evidence.validation_json {
         save_json_pretty(path, &validation)?;
     }
@@ -165,10 +187,17 @@ pub fn run_fix(request: FixRequest) -> Result<FixReport, String> {
         detected_problem: Some(problem_label(&detected.kind).to_string()),
         risk,
         files_planned: proposal.files_to_change.clone(),
-        files_changed: apply_result.files_changed,
+        files_changed_by_patch: apply_result.files_changed.clone(),
+        files_changed_after_validation: git_status_after_validation
+            .iter()
+            .map(|line| git_status_path(line))
+            .collect(),
+        validation_side_effects,
         validation_commands: detected.validation_commands.clone(),
         status,
         evidence_dir: evidence.evidence_dir.clone(),
+        source_mutation: true,
+        evidence_written: true,
         warnings,
         blockers: validation.blockers.clone(),
         provider: proposal.proposer.clone(),
@@ -197,11 +226,13 @@ pub fn print_fix(request: FixRequest) -> Result<String, String> {
         FixStatus::Blocked => "blocked",
     };
     Ok(format!(
-        "EVE Fix Report\n\nTarget: {}\nMode: {}\nProject type: {}\nWorkspace dirty: {}\n\nDetected problem:\n  {}\n\nProposed fix:\n  {}\n\nRisk:\n  {}\n\nFiles:\n  {}\n\nValidation plan:\n  {}\n\nStatus:\n  {}\n\nEvidence:\n  {}\n{}\n{}\n{}",
+        "EVE Fix Report\n\nTarget: {}\nMode: {}\nProject type: {}\nWorkspace dirty: {}\nSource mutation: {}\nEvidence written: {}\n\nDetected problem:\n  {}\n\nProposed fix:\n  {}\n\nRisk:\n  {}\n\nFiles:\n  {}\n\nValidation plan:\n  {}\n\nStatus:\n  {}\n\nEvidence:\n  {}\n{}\n{}\n{}\n{}",
         display_rel(&report.target_path),
         mode,
         report.project_type,
         report.workspace_dirty,
+        report.source_mutation,
+        report.evidence_written,
         report.detected_problem.as_deref().unwrap_or("none"),
         if report.files_planned.is_empty() {
             "none".to_string()
@@ -225,6 +256,14 @@ pub fn print_fix(request: FixRequest) -> Result<String, String> {
             String::new()
         } else {
             format!("\nWarnings:\n  {}", report.warnings.join("\n  "))
+        },
+        if report.validation_side_effects.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "\nValidation side effects:\n  {}",
+                report.validation_side_effects.join("\n  ")
+            )
         },
         if report.blockers.is_empty() {
             String::new()
@@ -737,8 +776,13 @@ fn run_fix_validation(
     }
 }
 
-fn build_evidence_paths(request: &FixRequest) -> FixEvidencePaths {
-    let evidence_dir = request.evidence_dir.join(&request.fix_id);
+fn build_evidence_paths(request: &FixRequest, target_root: &Path) -> FixEvidencePaths {
+    let evidence_root = if request.evidence_dir.is_absolute() {
+        request.evidence_dir.clone()
+    } else {
+        target_root.join(&request.evidence_dir)
+    };
+    let evidence_dir = evidence_root.join(&request.fix_id);
     FixEvidencePaths {
         request_json: evidence_dir.join("request.json"),
         detection_json: evidence_dir.join("detection.json"),
@@ -785,9 +829,21 @@ fn write_report_files(
             markdown.push_str(&format!("- `{file}`\n"));
         }
     }
-    if !report.files_changed.is_empty() {
-        markdown.push_str("\n## Files Changed\n\n");
-        for file in &report.files_changed {
+    if !report.files_changed_by_patch.is_empty() {
+        markdown.push_str("\n## Files Changed By Patch\n\n");
+        for file in &report.files_changed_by_patch {
+            markdown.push_str(&format!("- `{file}`\n"));
+        }
+    }
+    if !report.files_changed_after_validation.is_empty() {
+        markdown.push_str("\n## Files Changed After Validation\n\n");
+        for file in &report.files_changed_after_validation {
+            markdown.push_str(&format!("- `{file}`\n"));
+        }
+    }
+    if !report.validation_side_effects.is_empty() {
+        markdown.push_str("\n## Validation Side Effects\n\n");
+        for file in &report.validation_side_effects {
             markdown.push_str(&format!("- `{file}`\n"));
         }
     }
@@ -914,6 +970,43 @@ fn git_status_short(target_root: &Path) -> Vec<String> {
             .collect(),
         _ => Vec::new(),
     }
+}
+
+fn git_status_path(line: &str) -> String {
+    line.get(3..)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(line)
+        .to_string()
+}
+
+fn compute_validation_side_effects(
+    before_validation: &[String],
+    after_validation: &[String],
+    patch_files: &[String],
+    cargo_lock_before_validation: bool,
+    cargo_lock_after_validation: bool,
+) -> Vec<String> {
+    let before_paths: std::collections::BTreeSet<String> = before_validation
+        .iter()
+        .map(|line| git_status_path(line))
+        .collect();
+    let patch_paths: std::collections::BTreeSet<String> = patch_files.iter().cloned().collect();
+    let mut side_effects = Vec::new();
+    for path in after_validation.iter().map(|line| git_status_path(line)) {
+        if !before_paths.contains(&path) && !patch_paths.contains(&path) {
+            side_effects.push(path);
+        }
+    }
+    if !cargo_lock_before_validation
+        && cargo_lock_after_validation
+        && !side_effects.iter().any(|path| path == "Cargo.lock")
+    {
+        side_effects.push("Cargo.lock".to_string());
+    }
+    side_effects.sort();
+    side_effects.dedup();
+    side_effects
 }
 
 fn mode_for(request: &FixRequest) -> FixMode {
