@@ -248,3 +248,11 @@ See `docs/proofs/phase_21_fix_proof_pack.md`.
 - `docs/phase_18_outcome_learning.md`
 - `docs/phase_19_work_fitness.md`
 - `docs/phase_20_governed_self_improvement.md`
+
+## EVE Doctor
+
+```bash
+cargo run -- doctor .
+cargo run -- doctor . --json
+cargo run -- doctor . --validate
+doctor diagnoses project health, writes target-local evidence under <target>/.eva/doctor/<doctor_id>/, and suggests safe fix commands. It is read-only by default and does not run cargo validation unless --validate is passed.
